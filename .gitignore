@@ -6,8 +6,9 @@
 *.swp
 .buildlog/
 .history
-
-
+.env
+.idea
+/norsk_flutter_app/build/
 
 # Flutter repo-specific
 /bin/cache/

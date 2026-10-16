@@ -1,0 +1,23 @@
+name: norsk_audio_groups
+description: Norwegian listening practice with group libraries and sentence repetition.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.7.0
+  file_picker: ^8.1.4
+  just_audio: ^0.9.42
+  path_provider: ^2.1.5
+  flutter_secure_storage: ^9.2.2
+  path: ^1.9.0
+  shared_preferences: ^2.3.3
+  audio_session: ^0.1.21
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true

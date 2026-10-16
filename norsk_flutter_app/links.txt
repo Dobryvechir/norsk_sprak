@@ -1,0 +1,5 @@
+flutter create --platforms=android,ios .
+flutter pub get
+flutter analyze
+flutter test
+flutter run
