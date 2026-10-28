@@ -10,16 +10,23 @@ the uploader or the group over any monthly limit. Limits come from two places:
         max_recording_duration_minutes
     group["ai"]["monthly_audio_minutes_limit"] - whole group
 
-A missing or null limit means "unlimited". Failed recordings don't count.
+A missing or null limit means "unlimited". Each uploaded audio file counts
+(a recording with audio in three languages counts three times). Failed
+transcriptions don't count.
 """
 
 from .helpers import current_month, fail
 from .repository import repo
 
 
-def _counts_this_month(recording) -> bool:
-    """True if a recording uses up quota: created this month and not failed."""
-    return recording["created_at"][:7] == current_month() and recording["status"] != "failed"
+def _uploads_this_month(group_id) -> list:
+    """The group's audio uploads that use up quota: created this month and not failed."""
+    return [
+        entry
+        for recording in repo.list("recordings") if recording["group_id"] == group_id
+        for entry in recording["audio"].values()
+        if entry["created_at"][:7] == current_month() and entry["status"] != "failed"
+    ]
 
 
 def check_upload_quota(group_id, user, membership, new_seconds):
@@ -28,18 +35,15 @@ def check_upload_quota(group_id, user, membership, new_seconds):
     Call this while holding `repo.lock`, and save the new recording before
     releasing it - otherwise two simultaneous uploads could both pass the check.
     """
-    group_recordings = [
-        r for r in repo.list("recordings")
-        if r["group_id"] == group_id and _counts_this_month(r)
-    ]
-    my_recordings = [r for r in group_recordings if r["uploader_id"] == user["id"]]
-    my_seconds = sum(r["duration_seconds"] for r in my_recordings)
+    group_uploads = _uploads_this_month(group_id)
+    my_uploads = [a for a in group_uploads if a["uploader_id"] == user["id"]]
+    my_seconds = sum(a["duration_seconds"] for a in my_uploads)
 
     # --- Per-user limits (from the membership) ---
     quota = membership.get("quota", {})
 
     limit = quota.get("max_recordings_per_month")
-    if limit is not None and len(my_recordings) >= limit:
+    if limit is not None and len(my_uploads) >= limit:
         fail(403, "Monthly recording quota exceeded")
 
     limit = quota.get("max_audio_minutes_per_month")
@@ -54,6 +58,6 @@ def check_upload_quota(group_id, user, membership, new_seconds):
     group = repo.get("groups", group_id)
     limit = group["ai"].get("monthly_audio_minutes_limit")
     if limit is not None:
-        group_seconds = sum(r["duration_seconds"] for r in group_recordings)
+        group_seconds = sum(a["duration_seconds"] for a in group_uploads)
         if group_seconds + new_seconds > limit * 60:
             fail(403, "Group AI quota exceeded")

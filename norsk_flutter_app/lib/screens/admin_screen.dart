@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
 class AdminScreen extends StatefulWidget {
@@ -13,44 +14,33 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> addMember() async {
     final user = TextEditingController(); String role = 'viewer';
     final result = await showDialog<(String,String)>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, update) => AlertDialog(
-      title: const Text('Add member'), content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: user, decoration: const InputDecoration(labelText: 'Existing user ID')),
-        DropdownButton<String>(value: role, isExpanded: true, items: ['viewer','uploader','admin'].map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(), onChanged: (v) => update(() => role = v!)),
-      ]), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, (user.text.trim(),role)), child: const Text('Add'))])));
+      title: Text(context.tr('addMember')), content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: user, decoration: InputDecoration(labelText: context.tr('existingUserId'))),
+        DropdownButton<String>(value: role, isExpanded: true, items: ['viewer','uploader','admin'].map((x) => DropdownMenuItem(value: x, child: Text(context.trRole(x)))).toList(), onChanged: (v) => update(() => role = v!)),
+      ]), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(context.tr('cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, (user.text.trim(),role)), child: Text(context.tr('add')))])));
     if (result == null || result.$1.isEmpty) return;
     try { await widget.api.addMember(widget.group.id, result.$1, result.$2); refresh(); }
     catch (e) { showError(e); }
   }
   void showError(Object e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(readableError(e)))); }
-  Future<void> createUser() async {
-    final email = TextEditingController(); final password = TextEditingController();
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Create user (system admin)'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
-        TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password (10+ chars)')),
-      ]), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create'))]));
-    if (ok == true) { try { final created = await widget.api.createUser(email.text, password.text); if (mounted) await showDialog<void>(context: context, builder: (ctx) => AlertDialog(title: const Text('User created'), content: SelectableText('User ID: ${created.id}\nEmail: ${created.email}\nUse this ID when adding the user to a group.'), actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))])); }
-      catch (e) { showError(e); } }
-  }
   Future<void> edit(Membership m) async {
     String role = m.role; bool enabled = m.enabled;
     final records = TextEditingController(text: m.quota['max_recordings_per_month']?.toString() ?? '');
     final minutes = TextEditingController(text: m.quota['max_audio_minutes_per_month']?.toString() ?? '');
     final duration = TextEditingController(text: m.quota['max_recording_duration_minutes']?.toString() ?? '');
     final ok = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx,update) => AlertDialog(
-      title: Text('Membership: ${m.userId}'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        DropdownButton<String>(value: role, isExpanded: true, items: ['viewer','uploader','admin'].map((x) => DropdownMenuItem(value:x,child:Text(x))).toList(), onChanged:(v)=>update(()=>role=v!)),
-        SwitchListTile(title: const Text('Enabled'), value: enabled, onChanged:(v)=>update(()=>enabled=v)),
-        TextField(controller: records, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Max uploads per month (blank = unlimited)')),
-        TextField(controller: minutes, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Max audio minutes per month')),
-        TextField(controller: duration, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Max duration per recording (minutes)')),
-      ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx,false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx,true), child: const Text('Save'))])));
+      title: Text(context.tr('membershipTitle', {'id': m.userId})), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButton<String>(value: role, isExpanded: true, items: ['viewer','uploader','admin'].map((x) => DropdownMenuItem(value: x, child: Text(context.trRole(x)))).toList(), onChanged:(v)=>update(()=>role=v!)),
+        SwitchListTile(title: Text(context.tr('enabled')), value: enabled, onChanged:(v)=>update(()=>enabled=v)),
+        TextField(controller: records, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.tr('maxUploadsPerMonth'))),
+        TextField(controller: minutes, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.tr('maxMinutesPerMonth'))),
+        TextField(controller: duration, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.tr('maxRecordingDuration'))),
+      ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx,false), child: Text(context.tr('cancel'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx,true), child: Text(context.tr('save')))])));
     if (ok == true) {
       try {
-        int? parse(TextEditingController c) { if (c.text.trim().isEmpty) return null; final n=int.parse(c.text.trim()); if(n<0) throw const FormatException('Quota must be non-negative'); return n; }
+        int? parse(TextEditingController c) { if (c.text.trim().isEmpty) return null; final n=int.parse(c.text.trim()); if(n<0) throw FormatException(trNow('quotaNonNegative')); return n; }
         await widget.api.updateMember(widget.group.id,m,role,enabled,{
           'max_recordings_per_month': parse(records), 'max_audio_minutes_per_month': parse(minutes),
           'max_recording_duration_minutes': parse(duration),
@@ -58,18 +48,17 @@ class _AdminScreenState extends State<AdminScreen> {
       } catch (e) { showError(e); }
     }
   }
-  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text('Manage ${widget.group.name}'), actions: [IconButton(onPressed: refresh, icon: const Icon(Icons.refresh))]),
+  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(context.tr('manageGroup', {'name': widget.group.name})), actions: [IconButton(tooltip: context.tr('refresh'), onPressed: refresh, icon: const Icon(Icons.refresh))]),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 8, children: [
-        FilledButton.icon(onPressed: addMember, icon: const Icon(Icons.person_add), label: const Text('Add member')),
-        if (widget.api.user?.systemAdmin == true) OutlinedButton.icon(onPressed: createUser, icon: const Icon(Icons.person_add_alt), label: const Text('Create user')),
+        FilledButton.icon(onPressed: addMember, icon: const Icon(Icons.person_add), label: Text(context.tr('addMember'))),
       ])),
       Expanded(child: FutureBuilder<List<Membership>>(future: future, builder: (ctx,snap) {
-        if (!snap.hasData) return Center(child: snap.hasError ? Text('Admin permission required: ${readableError(snap.error!)}') : const CircularProgressIndicator());
-        if (snap.data!.isEmpty) return const Center(child: Text('No members.'));
+        if (!snap.hasData) return Center(child: snap.hasError ? Text(context.tr('adminPermissionRequired', {'error': readableError(snap.error!)})) : const CircularProgressIndicator());
+        if (snap.data!.isEmpty) return Center(child: Text(context.tr('noMembers')));
         return ListView.builder(itemCount: snap.data!.length, itemBuilder: (ctx,i) {
           final m=snap.data![i]; return ListTile(title: Text(m.userId),
-            subtitle: Text('${m.role} · ${m.enabled ? 'enabled' : 'disabled'} · quota ${m.quota}'),
+            subtitle: Text(context.tr('memberSummary', {'role': context.trRole(m.role), 'state': context.tr(m.enabled ? 'stateEnabled' : 'stateDisabled'), 'quota': m.quota})),
             trailing: const Icon(Icons.edit), onTap: () => edit(m));
         });
       })),

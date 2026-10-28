@@ -17,12 +17,18 @@ These have regression tests in `tests/test_recording_lifecycle.py`.
   `storage.delete()` now does nothing if the file is already gone, in both the
   local and Google Drive backends.
 - **Deleting a recording during transcription brought it back.** The worker now
-  checks the recording still exists before saving its result
-  (`worker.save_if_still_exists`). The usage record is still written, because
+  checks the recording and that language's audio still exist before saving its
+  result (`worker.save_result`). The usage record is still written, because
   the AI minutes were spent.
 - **Worker restart mid-transcription left a recording stuck in `processing`.**
-  At startup the worker now puts any `processing` recordings back to `pending`
+  At startup the worker now puts any `processing` audio back to `pending`
   (`worker.recover_interrupted_jobs`). This relies on there being only one worker.
+
+- **Non-Latin text crashed the JSON store on Windows.** Files were read and
+  written in the platform's default encoding (cp1252), which can't hold
+  Cyrillic, Greek or Hebrew. `JsonRepo` now always uses UTF-8. Data files
+  written earlier with non-ASCII Latin letters (e.g. `ø`) on Windows would need
+  converting to UTF-8 once.
 
 ## Limitations (by design for now)
 

@@ -8,8 +8,8 @@ Two interchangeable backends with the same three methods:
     get(key)           - return a local Path to the audio file.
     delete(key)        - remove the file. Does nothing if it is already gone.
 
-`key` is chosen by the upload endpoint as '<group_id>/<recording_id><ext>'
-and saved on the recording as `audio_key`.
+`key` is chosen by the upload endpoint as '<group_id>/<recording_id>_<lang>_<random><ext>'
+and saved in the recording's audio entry for that language as `audio_key`.
 
     LocalAudio - files under <data_dir>/audio/<key>
     DriveAudio - files in a Google Drive folder. Drive assigns its own file ID,

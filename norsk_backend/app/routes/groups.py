@@ -64,6 +64,6 @@ def set_ai_config(gid: str, data: AIConfigRequest, user=Depends(current_user)):
 
 @router.get("/api/groups/{gid}/usage")
 def list_usage(gid: str, user=Depends(current_user)):
-    """One usage record per successfully transcribed recording in the group."""
+    """One usage record per successfully transcribed audio (recording + language) in the group."""
     require_role(user, gid, [ADMIN])
     return [u for u in repo.list("usage") if u["group_id"] == gid]

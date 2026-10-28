@@ -2,10 +2,12 @@ import 'dart:io';
 import 'package:dio/dio.dart' show Headers;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../models/entities.dart';
 import 'api.dart';
 
-/// Cached audio is stored as `<id>.<ext>` with the real extension, because iOS (AVPlayer)
-/// picks the decoder for local files from the extension.
+/// Cached audio is stored as `<recording id>_<language>_<upload time>.<ext>` (chapters: `chapter-<id>_…`), one file per
+/// language. The upload time makes a replaced audio get a new name, so a stale copy is never played.
+/// The real extension is kept because iOS (AVPlayer) picks the decoder for local files from it.
 class AudioCache {
   static const _extensions = {'mp3','m4a','wav','ogg','opus','mp4','aac','flac'};
   static const _mimeExtensions = {
@@ -21,31 +23,42 @@ class AudioCache {
     await dir.create(recursive: true);
     return dir;
   }
-  /// The downloaded file for [id], or null if it has not been downloaded yet.
-  Future<File?> cached(String id) async {
+  /// Recordings and chapters have separate ID spaces, so chapters get a prefix.
+  static String cacheId(Recording r) => r.isChapter ? 'chapter-${r.id}' : r.id;
+  static String _name(Recording r, String language) =>
+    '${cacheId(r)}_${language}_${(r.audio[language]?.createdAt ?? '').replaceAll(RegExp(r'\D'), '')}';
+  /// The downloaded file for [language]'s audio of [r], or null if it has not been downloaded yet.
+  /// Older copies of the same language (from before the audio was replaced) are deleted.
+  Future<File?> cached(Recording r, String language) async {
+    final name = _name(r, language);
+    File? found;
     await for (final e in (await _dir()).list()) {
-      if (e is! File || p.basenameWithoutExtension(e.path) != id) continue;
-      // Files from older app versions were saved as `<id>.audio`, which iOS cannot play: drop them.
-      if (p.extension(e.path) == '.audio' || await e.length() == 0) { await e.delete(); continue; }
-      return e;
+      if (e is! File) continue;
+      final base = p.basenameWithoutExtension(e.path);
+      if (base == name && p.extension(e.path) != '.partial' && await e.length() > 0) { found = e; }
+      else if (base.startsWith('${cacheId(r)}_${language}_') && !base.endsWith('.download')) { await e.delete(); }
     }
-    return null;
+    return found;
   }
-  Future<File> obtain(String id, void Function(double) onProgress) async {
-    final existing = await cached(id);
+  Future<File> obtain(Recording r, String language, void Function(double) onProgress) async {
+    final existing = await cached(r, language);
     if (existing != null) { onProgress(1); return existing; }
-    final tmp = File(p.join((await _dir()).path, '$id.download.partial'));
+    final name = _name(r, language);
+    final tmp = File(p.join((await _dir()).path, '$name.download.partial'));
     try {
-      final headers = await api.downloadAudio(id, tmp.path, onProgress);
-      return tmp.rename(p.join(tmp.parent.path, '$id.${_extensionFrom(headers)}'));
+      final headers = await api.downloadAudio(r, language, tmp.path, onProgress);
+      return await tmp.rename(p.join(tmp.parent.path, '$name.${_extensionFrom(headers)}'));
     } catch (_) {
       if (await tmp.exists()) await tmp.delete();
       rethrow;
     }
   }
-  Future<void> clear(String id) async {
+  /// Deletes every cached audio of the recording (or chapter: pass [cacheId]), in all languages
+  /// (and files from older app versions).
+  Future<void> clear(String recordingId) async {
     await for (final e in (await _dir()).list()) {
-      if (e is File && p.basenameWithoutExtension(e.path) == id) await e.delete();
+      final base = p.basenameWithoutExtension(e.path);
+      if (e is File && (base == recordingId || base.startsWith('${recordingId}_'))) await e.delete();
     }
   }
   /// Extension from the server's Content-Disposition filename, then Content-Type, else mp3.

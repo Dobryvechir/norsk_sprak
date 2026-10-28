@@ -48,7 +48,7 @@ class JsonRepo:
             path = self._path(kind, key)
             if not path.is_file():
                 return None
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
 
     def list(self, kind):
         """Return every entity of this kind (ordered by ID)."""
@@ -56,7 +56,7 @@ class JsonRepo:
             folder = self.root / kind
             if not folder.exists():
                 return []
-            return [json.loads(f.read_text()) for f in sorted(folder.glob("*.json"))]
+            return [json.loads(f.read_text(encoding="utf-8")) for f in sorted(folder.glob("*.json"))]
 
     def put(self, kind, key, value):
         """Create or overwrite an entity.
@@ -69,7 +69,9 @@ class JsonRepo:
             folder.mkdir(parents=True, exist_ok=True)
             fd, tmp_path = tempfile.mkstemp(dir=folder, suffix=".tmp")
             try:
-                with os.fdopen(fd, "w") as f:
+                # Always UTF-8: the platform default (cp1252 on Windows) cannot store
+                # Cyrillic, Greek or Hebrew text.
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(value, f, ensure_ascii=False, indent=2)
                     f.flush()
                     os.fsync(f.fileno())  # make sure the bytes are really on disk

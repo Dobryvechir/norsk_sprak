@@ -43,8 +43,9 @@ class AIConfigRequest(BaseModel):
 
 
 class SentenceEditRequest(BaseModel):
-    """Correct one transcribed sentence's text and/or timing."""
+    """Correct one sentence in one language: its text, its timing in that
+    language's audio, or both. Timing needs both start_ms and end_ms."""
 
-    text: str = Field(min_length=1)
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
+    text: str | None = Field(default=None, min_length=1)
+    start_ms: int | None = Field(default=None, ge=0)
+    end_ms: int | None = Field(default=None, gt=0)

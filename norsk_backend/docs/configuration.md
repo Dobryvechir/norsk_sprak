@@ -17,6 +17,7 @@ win over `.env`. Defined in `app/config.py`. Copy `.env.example` to start.
 | `BOOTSTRAP_ADMIN_EMAIL` | | With the password below, creates the first system admin at startup if that email doesn't exist yet. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | | ≥ 12 characters. Remove both after the first start. |
 | `MAX_UPLOAD_MB` | `150` | Largest accepted upload. |
+| `ALLOWED_ORIGINS` | *(none)* | Comma-separated web origins allowed to call the API from a browser (CORS), e.g. `localhost,https://app.example.com`. A full origin must match exactly; a bare host such as `localhost` allows it over http/https on any port. Empty = no browser origins allowed (mobile/desktop apps don't need CORS). |
 
 Generate a good secret:
 

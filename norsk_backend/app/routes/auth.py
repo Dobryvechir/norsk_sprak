@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from ..helpers import fail
 from ..repository import membership_key, repo
 from ..schemas import LoginRequest
-from ..security import create_token, current_user, password_hasher, public_user
+from ..security import ADMIN, create_token, current_user, password_hasher, public_user
 
 router = APIRouter()
 
@@ -39,13 +39,16 @@ def me(user=Depends(current_user)):
 @router.get("/api/me/groups")
 def my_groups(user=Depends(current_user)):
     """Groups the logged-in user can see: all of them for a system admin,
-    otherwise those where they have an enabled membership."""
+    otherwise those where they have an enabled membership.
+
+    Each group gets an extra "my_role" field with the user's role in it
+    (system admins count as "admin" everywhere)."""
     if user.get("system_admin"):
-        return repo.list("groups")
+        return [{**group, "my_role": ADMIN} for group in repo.list("groups")]
 
     visible = []
     for group in repo.list("groups"):
         membership = repo.get("memberships", membership_key(group["id"], user["id"]))
         if membership and membership.get("enabled", True):
-            visible.append(group)
+            visible.append({**group, "my_role": membership["role"]})
     return visible

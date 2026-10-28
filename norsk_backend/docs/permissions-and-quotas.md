@@ -34,8 +34,9 @@ For a system admin, `get_membership` returns a made-up membership
 ## Quotas (`quotas.py`)
 
 Checked on every upload. All limits are per calendar month (UTC). Missing or
-`null` means unlimited. Recordings with status `"failed"` don't count, so a failed
-transcription gives the quota back.
+`null` means unlimited. Every uploaded audio file counts, so a recording with audio
+in two languages counts as two uploads. Audio whose transcription `"failed"`
+doesn't count, so a failed transcription gives the quota back.
 
 | Where it's set | Field | Rejects the upload when… | Error |
 |---|---|---|---|

@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # Largest audio upload accepted, in megabytes.
     max_upload_mb: int = 150
 
+    # Web origins allowed to call the API from a browser (CORS), comma-separated.
+    # An entry is a full origin ("https://app.example.com") or a bare host name
+    # ("localhost"), which allows that host over http/https on any port.
+    allowed_origins: str = ""
+
+    @property
+    def allowed_origin_list(self) -> list[str]:
+        return [o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip()]
+
 
 settings = Settings()
 

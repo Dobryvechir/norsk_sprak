@@ -2,8 +2,9 @@
 
 ## The big picture
 
-The backend lets groups of people share Norwegian audio recordings. Each recording
-is transcribed into sentences with start/end times, so a listening-practice app
+The backend lets groups of people share audio recordings for language practice.
+A recording can have audio in several languages; each is transcribed into
+sentences with start/end times, so a listening-practice app
 (the Flutter app in `../norsk_flutter_app`) can play it back sentence by sentence.
 
 It runs as **two processes** that share the same data:
@@ -20,13 +21,13 @@ It runs as **two processes** that share the same data:
                           ▲                        ▲
                           │  polls every 3 s       │ reads audio
                      Worker (python -m app.worker) ┘
-                          │  - picks a "pending" recording
+                          │  - picks a "pending" audio (recording + language)
                           │  - ffmpeg → OpenAI Whisper → sentences
                           │  - sets status "ready" or "failed"
 ```
 
 The API and the worker never talk to each other directly. They only communicate
-through the recording's `status` field in the metadata store.
+through the `status` field of each language's audio in the metadata store.
 
 ## Module map (`app/`)
 
@@ -70,12 +71,12 @@ routes/*  ──▶  security, quotas, schemas, storage, transcription
    valid audio (422). It must also be 0–90 minutes.
 5. **Quota.** Under `repo.lock`, `check_upload_quota` sums this month's uploads;
    then the audio is stored (`storage.py`) and the recording saved with
-   `status: "pending"`. Holding the lock across both steps stops two
+   that language's audio at `status: "pending"`. Holding the lock across both steps stops two
    simultaneous uploads from slipping past the same limit.
 6. **Reply** `202 Accepted` with the new recording ID. The temp file is deleted.
 
 Later the worker notices the pending recording and transcribes it. The app polls
-`GET /api/recordings/{id}` until `status` becomes `"ready"` or `"failed"`.
+`GET /api/recordings/{id}` until `audio[lang].status` becomes `"ready"` or `"failed"`.
 
 ## Errors
 

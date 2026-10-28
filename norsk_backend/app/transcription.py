@@ -2,7 +2,7 @@
 Audio analysis and speech-to-text.
 
     get_duration(path)  - length of an audio file in seconds (uses ffprobe)
-    transcribe(path)    - Norwegian speech -> list of timed sentences (OpenAI Whisper)
+    transcribe(path)    - speech in a given language -> list of timed sentences (OpenAI Whisper)
     segment(words)      - group timed words into sentences
 
 Requires the `ffmpeg` and `ffprobe` command-line tools to be installed.
@@ -26,6 +26,9 @@ CHUNK_SECONDS = 480
 SENTENCE_END_PATTERN = re.compile(r'[.!?]["”»]?$')
 MAX_PAUSE_MS = 1100
 
+# Whisper's code where it differs from ours: Whisper calls Norwegian Bokmål "no".
+WHISPER_LANGUAGES = {"nb": "no"}
+
 
 def get_duration(path) -> float:
     """Return the length of an audio file in seconds.
@@ -39,8 +42,8 @@ def get_duration(path) -> float:
     return float(json.loads(result.stdout)["format"]["duration"])
 
 
-def transcribe(path, provider="openai", model="whisper-1", api_key=None):
-    """Transcribe a Norwegian audio file into timed sentences.
+def transcribe(path, provider="openai", model="whisper-1", language="nb", api_key=None):
+    """Transcribe an audio file spoken in `language` into timed sentences.
 
     Returns a list like:
         [{"index": 0, "text": "Hei.", "start_ms": 0, "end_ms": 400}, ...]
@@ -78,7 +81,7 @@ def transcribe(path, provider="openai", model="whisper-1", api_key=None):
             # 2. Send it to Whisper, asking for a timestamp on every word.
             with chunk_path.open("rb") as f:
                 result = client.audio.transcriptions.create(
-                    model=model, file=f, language="no",
+                    model=model, file=f, language=WHISPER_LANGUAGES.get(language, language),
                     response_format="verbose_json", timestamp_granularities=["word"],
                 )
 
