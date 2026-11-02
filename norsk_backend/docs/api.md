@@ -86,7 +86,7 @@ Read-only: there are no endpoints to create, change or delete them.
 | GET | `/api/sections/{id}` | any | → one section. `404 Section not found` |
 | GET | `/api/sections/{id}/chapters?page=1&page_size=20` | any | → `{items: [chapter…], total, page, page_size}` |
 | GET | `/api/chapters/{id}` | any | → one chapter with its `audio` and `sentences` maps. `404 Chapter not found` |
-| GET | `/api/chapters/{id}/audio/{lang}` | any | → the chapter's audio file in `lang` |
+| GET | `/api/chapters/{id}/audio/{lang}` | any | → the chapter's audio file in `lang`, or a `307` redirect to the audio's `url` if it has one |
 
 - Only what the user may see is returned: a book or section with empty `groups`
   is visible to everyone; otherwise only to enabled members of one of its

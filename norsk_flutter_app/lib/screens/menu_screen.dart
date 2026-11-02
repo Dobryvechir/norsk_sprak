@@ -6,6 +6,7 @@ import 'admin_menu_screen.dart';
 import 'books_screen.dart';
 import 'coming_soon_screen.dart';
 import 'groups_screen.dart';
+import 'saved_chapters_screen.dart';
 import 'settings_screen.dart';
 /// Main menu shown right after login.
 class MenuScreen extends StatefulWidget {
@@ -23,7 +24,8 @@ class _MenuScreenState extends State<MenuScreen> {
   }
   /// The groups decide whether the Admin entry is shown (admin of at least one group).
   Future<void> loadGroups() async {
-    try { final g = await widget.api.groups(); if (mounted) setState(() => groups = g); }
+    // Reaching the server also ends an offline start (see Api.offline).
+    try { final g = await widget.api.groups(); widget.api.offline = false; if (mounted) setState(() => groups = g); }
     catch (_) {} // keep the previous list; system admins see Admin regardless
   }
   Future<void> open(Widget screen) async {
@@ -38,8 +40,12 @@ class _MenuScreenState extends State<MenuScreen> {
     body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520), child: ListView(padding: const EdgeInsets.all(16), children: [
       if (widget.api.user != null) Padding(padding: const EdgeInsets.only(bottom: 12),
         child: Text(context.tr('signedInAs', {'email': widget.api.user!.email}), textAlign: TextAlign.center)),
+      if (widget.api.offline) Card(color: Theme.of(context).colorScheme.secondaryContainer, child: ListTile(
+        leading: const Icon(Icons.cloud_off), title: Text(context.tr('offlineMode')),
+        trailing: IconButton(tooltip: context.tr('refresh'), onPressed: loadGroups, icon: const Icon(Icons.refresh)))),
       entry(Icons.headphones, context.tr('menuRecords'), () => open(GroupsScreen(api: widget.api))),
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
+      entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
       entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(const ComingSoonScreen(titleKey: 'menuChat'))),
       entry(Icons.settings, context.tr('menuSettings'), () => open(const SettingsScreen())),
       if (widget.api.hasAdminRights(groups)) entry(Icons.admin_panel_settings, context.tr('menuAdmin'), () => open(AdminMenuScreen(api: widget.api))),

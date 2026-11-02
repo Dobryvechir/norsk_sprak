@@ -7,11 +7,10 @@ import '../services/sentence_player.dart';
 import '../services/settings.dart';
 import 'upload_screen.dart';
 /// Plays one language's audio of a recording sentence by sentence, showing the texts in the chosen text languages.
-/// Also plays book chapters ([PlayerScreen.chapter]), which are read-only: no editing, uploading or deleting.
+/// (Book chapters have their own player: ChapterPlayerScreen.)
 class PlayerScreen extends StatefulWidget {
-  final Api api; final StudyGroup? group; final String recordingId; final bool isChapter;
-  const PlayerScreen({super.key, required this.api, required StudyGroup this.group, required this.recordingId}) : isChapter = false;
-  const PlayerScreen.chapter({super.key, required this.api, required String chapterId}) : group = null, recordingId = chapterId, isChapter = true;
+  final Api api; final StudyGroup group; final String recordingId;
+  const PlayerScreen({super.key, required this.api, required this.group, required this.recordingId});
   @override State<PlayerScreen> createState() => _PlayerScreenState();
 }
 class _PlayerScreenState extends State<PlayerScreen> {
@@ -25,7 +24,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> load() async {
     setState(() { busy = true; error = null; });
     try {
-      final r = await (widget.isChapter ? widget.api.chapter(widget.recordingId) : widget.api.recording(widget.recordingId));
+      final r = await widget.api.recording(widget.recordingId);
       if (!mounted) return;
       // Keep the language being played; otherwise the preferred audio language, otherwise the first available.
       final available = orderedLanguages(r.audio.keys);
@@ -101,7 +100,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     catch (e) { showError(e); }
   }
   Future<void> addAudio() async {
-    final added = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api, group: widget.group!, recording: recording)));
+    final added = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api, group: widget.group, recording: recording)));
     if (added == true) await load();
   }
   @override Widget build(BuildContext context) {
@@ -123,11 +122,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (v == 'cache' && r != null) { await AudioCache(widget.api).clear(AudioCache.cacheId(r)); await p?.audio.stop(); if (mounted) setState(() {}); }
         } catch (e) { showError(e); }
       }, itemBuilder: (_) => [PopupMenuItem(value: 'cache', child: Text(context.tr('clearOfflineAudio'))),
-        if (!widget.isChapter) ...[
-          PopupMenuItem(value: 'add', child: Text(context.tr('addAudioLanguage'))),
-          PopupMenuItem(value: 'retry', child: Text(context.tr('retryTranscription'))),
-          PopupMenuItem(value: 'delete', child: Text(context.tr('deleteAdminOnly'))),
-        ]])]),
+        PopupMenuItem(value: 'add', child: Text(context.tr('addAudioLanguage'))),
+        PopupMenuItem(value: 'retry', child: Text(context.tr('retryTranscription'))),
+        PopupMenuItem(value: 'delete', child: Text(context.tr('deleteAdminOnly')))])]),
       body: busy ? const Center(child: CircularProgressIndicator()) : error != null ? Center(child: Text(error!)) : r == null || p == null || audio == null ? const SizedBox() :
       Column(children: [
         Padding(padding: const EdgeInsets.all(16), child: Column(children: [
@@ -163,7 +160,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               final lines = [for (final l in shown) if (r.text(l, i).isNotEmpty) shown.length > 1 ? '${l.toUpperCase()}  ${r.text(l, i)}' : r.text(l, i)];
               return ListTile(selected: selected, selectedTileColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.35),
                 leading: Text('${i+1}'), title: Text(lines.join('\n')), subtitle: Text('${(s.startMs/1000).toStringAsFixed(2)}–${(s.endMs/1000).toStringAsFixed(2)}s'),
-                trailing: widget.isChapter ? null : IconButton(tooltip: context.tr('editUploaderAdmin'), icon: const Icon(Icons.edit_outlined), onPressed: () => edit(i)),
+                trailing: IconButton(tooltip: context.tr('editUploaderAdmin'), icon: const Icon(Icons.edit_outlined), onPressed: () => edit(i)),
                 onTap: () => p.select(i));
             });
           })),

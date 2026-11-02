@@ -13,7 +13,9 @@ A recording has a name and, per language, an audio file and sentences:
 Neither map has to contain every language, and a language can have sentences
 without audio (a translation). Sentence i means the same sentence in every
 language; audio[lang]["start_ms"][i] / ["end_ms"][i] is where it is spoken in
-that language's audio. See docs/data-model.md.
+that language's audio. An audio entry may have a "url" instead of (or as well
+as) "audio_key": the audio is then fetched from that URL, which takes priority
+over the configured storage (AUDIO_BACKEND). See docs/data-model.md.
 
 The life of one language's audio:
     1. Uploaded         -> status "pending"
@@ -27,7 +29,7 @@ import pathlib
 import tempfile
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from ..config import settings
 from ..helpers import LANGUAGES, fail, new_id, utc_now_iso
@@ -49,6 +51,21 @@ TIMESTAMP_SLACK_MS = 500  # a sentence may end this much past the end of the aud
 
 
 # --- Helpers -----------------------------------------------------------------
+
+def audio_response(entry, name, lang):
+    """The response for one language's audio. An entry with a "url" (audio kept
+    elsewhere, e.g. imported book chapters) redirects there; this takes priority
+    over "audio_key". Otherwise the file is served from the configured storage."""
+    if entry.get("url"):
+        return RedirectResponse(entry["url"], status_code=307)
+    if not entry.get("audio_key"):
+        fail(404, "Audio missing")
+    try:
+        path = get_storage().get(entry["audio_key"])
+    except FileNotFoundError:
+        fail(404, "Audio missing")
+    return FileResponse(path, filename=f"{name} ({lang}){path.suffix}")
+
 
 def check_language(lang):
     """Fail with 422 unless `lang` is one of the supported language codes."""
@@ -239,12 +256,7 @@ def get_recording(rid: str, user=Depends(current_user)):
 def get_audio(rid: str, lang: str, user=Depends(current_user)):
     """Download/stream the recording's audio file in `lang`."""
     recording = get_recording_for(user, rid)
-    entry = get_audio_entry(recording, lang)
-    try:
-        path = get_storage().get(entry["audio_key"])
-    except FileNotFoundError:
-        fail(404, "Audio missing")
-    return FileResponse(path, filename=f"{recording['name']} ({lang}){path.suffix}")
+    return audio_response(get_audio_entry(recording, lang), recording["name"], lang)
 
 
 @router.patch("/api/recordings/{rid}/sentences/{lang}/{index}")

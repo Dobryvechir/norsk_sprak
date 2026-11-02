@@ -18,8 +18,11 @@ class SentencePlayer {
     _stateSub = audio.playerStateStream.listen((_) => changed());
   }
   Sentence get current => sentences[index];
-  Future<void> open(String path) async {
-    await audio.setFilePath(path);
+  Future<void> open(String path) => _opened(audio.setFilePath(path));
+  /// Opens audio from [uri] (on web: a `blob:` URL of saved audio, the audio's own URL, or a data URI).
+  Future<void> openUri(Uri uri) => _opened(audio.setAudioSource(AudioSource.uri(uri)));
+  Future<void> _opened(Future<Duration?> loading) async {
+    await loading;
     if (sentences.isNotEmpty) await audio.seek(Duration(milliseconds: current.startMs));
     changed();
   }

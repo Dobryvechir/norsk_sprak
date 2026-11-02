@@ -134,6 +134,12 @@ optional `order`.
 Chapter audio is read through the same storage backend as recordings, using
 `audio_key`; put the files there yourself (e.g. under `data/audio/chapters/`).
 
+An audio entry may instead (or also) have a `"url"` where the audio file can be
+fetched, e.g. `{"url": "http://…/api/bible/nb/MAT/1", "start_ms": […], "end_ms": […]}`.
+A `url` takes priority over `audio_key` and the storage backend: the audio
+endpoint redirects to it (307), and the app downloads (Android/iOS) or plays
+(web) the audio straight from it. `url` is passed to clients as is.
+
 ## `usage`  (key: `<recording_id>_<lang>`)
 
 Written by the worker after each successful transcription of one language's audio.

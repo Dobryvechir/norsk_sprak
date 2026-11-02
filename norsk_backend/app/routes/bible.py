@@ -9,7 +9,9 @@ Each such book has an index file data/metadata/books/<book>_audio.json that maps
 `book_audio_router(book)` builds the endpoint
 GET /api/<book>/{language_code}/{chapter_id}/{verse_id}, which looks the file up
 in the index and passes it through from Drive, including a Range request
-(so players can seek). Another book is one line, e.g. in main.py:
+(so players can seek). The audio needs no login and may be fetched by a page on
+any site (the web app saves it for offline use), so its responses allow every
+origin (CORS), independently of ALLOWED_ORIGINS. Another book is one line, e.g. in main.py:
 
     app.include_router(bible.book_audio_router("norsk"))   # uses norsk_audio.json
 """
@@ -20,11 +22,10 @@ import threading
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
 
 from ..config import settings
-from ..helpers import fail
 
 # Drive sometimes answers with an HTML page (rate limit, "can't scan for
 # viruses" notice, ...) instead of the file; such answers are retried.
@@ -35,6 +36,10 @@ DRIVE_DOWNLOAD_URL = "https://drive.google.com/uc?export=download&id={id}"
 
 # Response headers from Drive that are passed on to the client.
 PASSED_HEADERS = ("content-range", "accept-ranges", "content-type")
+
+# Lets a web page on any origin read the audio (e.g. to save it for offline use).
+# Public, login-free data, so no credentials are involved.
+PUBLIC_CORS = {"Access-Control-Allow-Origin": "*"}
 
 _index_cache: dict[str, tuple[float, dict]] = {}  # book -> (file mtime, parsed index)
 _index_lock = threading.Lock()
@@ -64,6 +69,11 @@ def drive_file_id(book: str, key: str):
     """The Drive file ID stored for `key` in the book's index, or None."""
     record = audio_index(book).get(key)
     return record.get("id") if isinstance(record, dict) else None
+
+
+def fail(status_code: int, detail: str):
+    """Like helpers.fail, but the error is readable from any origin too."""
+    raise HTTPException(status_code, detail, headers=PUBLIC_CORS)
 
 
 def http_client() -> httpx.AsyncClient:
@@ -110,10 +120,11 @@ def book_audio_router(book: str) -> APIRouter:
             fail(404, "Audio not found")
         upstream = await fetch_drive_audio(file_id, range_header)
         if upstream is not None and upstream.status_code == 416:
-            return Response(status_code=416, headers={"Content-Range": upstream.headers.get("content-range", "")})
+            return Response(status_code=416, headers={"Content-Range": upstream.headers.get("content-range", ""), **PUBLIC_CORS})
         if upstream is None or not is_audio(upstream):
             fail(502, "Could not download the audio")
         headers = {name: upstream.headers[name] for name in PASSED_HEADERS if name in upstream.headers}
+        headers.update(PUBLIC_CORS)
         headers.setdefault("accept-ranges", "bytes")
         if headers.get("content-type", "").startswith("application/octet-stream"):
             headers["content-type"] = "audio/mpeg"

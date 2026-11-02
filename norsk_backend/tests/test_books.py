@@ -176,6 +176,21 @@ def test_chapters_are_listed_in_natural_order_and_playable():
     assert client.get(f"/api/chapters/{playable['id']}/audio/en", headers=headers).status_code == 404
 
 
+def test_chapter_audio_url_takes_priority_over_storage():
+    _, headers = make_user()
+    section = make_section(make_book({"en": "B"})["id"], {"en": "Matthew"})
+    chapter = make_chapter(section["id"], "1", with_audio=True)  # also has a stored file
+    url = "http://audio.example/nb/MAT/1"
+    chapter["audio"]["nb"]["url"] = url
+    chapter["audio"]["en"] = {"url": url + "?en", "start_ms": [0], "end_ms": [1500]}  # url only
+    repo.put("chapters", chapter["id"], chapter)
+
+    assert client.get(f"/api/chapters/{chapter['id']}", headers=headers).json()["audio"]["nb"]["url"] == url
+    for lang, expected in (("nb", url), ("en", url + "?en")):
+        response = client.get(f"/api/chapters/{chapter['id']}/audio/{lang}", headers=headers, follow_redirects=False)
+        assert response.status_code == 307 and response.headers["location"] == expected
+
+
 def test_sections_and_chapters_are_read_only():
     _, headers = make_user(system_admin=True)
     for path in ("/api/sections/x", "/api/chapters/x", "/api/books/bible/sections"):

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +20,10 @@ class Api {
   List<StudyGroup>? restoredGroups;
   /// Why a saved session could not be restored (shown on the login page).
   Object? restoreError;
+  /// True when the saved session was restored without reaching the server (no connection):
+  /// [user] is then the user last seen, and only what is saved on this device works.
+  bool offline = false;
+  static const _cachedUserKey = 'cached_user';
 
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
@@ -33,14 +38,31 @@ class Api {
       final results = await Future.wait([get('/api/me/groups'), get('/api/me')]);
       restoredGroups = [for (final e in results[0].data as List) StudyGroup.fromJson(Map<String, dynamic>.from(e as Map))];
       user = AppUser.fromJson(Map<String, dynamic>.from(results[1].data as Map));
+      await _cacheUser(prefs);
     } catch (e) {
       user = null; restoredGroups = null;
-      if (e is DioException && (e.response?.statusCode == 401 || e.response?.statusCode == 403)) { await _forgetToken(); }
-      else { token = null; restoreError = e; }
+      if (e is DioException && (e.response?.statusCode == 401 || e.response?.statusCode == 403)) { await _forgetToken(); return; }
+      // No connection: carry on with the user last seen, so the chapters saved on this device can be used.
+      final cached = prefs.getString(_cachedUserKey);
+      if (e is DioException && e.response == null && cached != null) {
+        try { user = AppUser.fromJson(Map<String, dynamic>.from(jsonDecode(cached) as Map)); offline = true; return; } catch (_) {}
+      }
+      token = null; restoreError = e;
     }
   }
 
-  Future<void> _forgetToken() async { token = null; user = null; await secure.delete(key: 'access_token'); }
+  /// Remembers the signed-in user for an offline start (see [offline]); only with "keep me logged in".
+  Future<void> _cacheUser(SharedPreferences prefs) async {
+    final u = user;
+    if (u == null || !keepLoggedIn) { await prefs.remove(_cachedUserKey); return; }
+    await prefs.setString(_cachedUserKey, jsonEncode(u.toJson()));
+  }
+
+  Future<void> _forgetToken() async {
+    token = null; user = null; offline = false;
+    await secure.delete(key: 'access_token');
+    await (await SharedPreferences.getInstance()).remove(_cachedUserKey);
+  }
 
   /// True when the JWT's `exp` claim is in the past (or the token can't be read).
   static bool tokenExpired(String jwt) {
@@ -75,7 +97,7 @@ class Api {
     user = AppUser.fromJson(Map<String, dynamic>.from(j['user'] as Map));
     this.rememberName = rememberName; this.keepLoggedIn = keepLoggedIn;
     rememberedEmail = rememberName ? email.trim() : '';
-    restoreError = null;
+    restoreError = null; offline = false;
     if (keepLoggedIn) { await secure.write(key: 'access_token', value: token); }
     else { await secure.delete(key: 'access_token'); }
     final prefs = await SharedPreferences.getInstance();
@@ -84,6 +106,7 @@ class Api {
     await prefs.setBool('keep_logged_in', keepLoggedIn);
     if (rememberName) { await prefs.setString('remembered_email', rememberedEmail); }
     else { await prefs.remove('remembered_email'); }
+    await _cacheUser(prefs);
   }
 
   Future<void> logout() async {
@@ -141,11 +164,31 @@ class Api {
     await dio.request(url(path), data: form, options: authOptions().copyWith(method: method.toUpperCase()),
       onSendProgress: (sent, total) { if (total > 0) onProgress(sent / total); });
   }
+  String _audioUrl(Recording r, String language) => url('/api/${r.isChapter ? 'chapters' : 'recordings'}/${r.id}/audio/$language');
+  /// The audio's own `url` (resolved against the server if relative), or null if it has none
+  /// and is served from the server's storage.
+  String? externalAudioUrl(Recording r, String language) {
+    final link = r.audio[language]?.url;
+    return link == null ? null : resolveUrl(link);
+  }
   /// Downloads the audio to [path] and returns the response headers (used to learn the file type).
+  /// From the audio's `url` when it has one (without the login token, which is only for this
+  /// server), else from the server's audio endpoint.
   Future<Headers> downloadAudio(Recording r, String language, String path, void Function(double) onProgress) async {
-    final response = await dio.download(url('/api/${r.isChapter ? 'chapters' : 'recordings'}/${r.id}/audio/$language'), path, options: authOptions(),
+    final external = externalAudioUrl(r, language);
+    final response = await dio.download(external ?? _audioUrl(r, language), path, options: external == null ? authOptions() : null,
       onReceiveProgress: (received, total) { if (total > 0) onProgress(received / total); });
     return response.headers;
+  }
+  /// The audio's bytes and media type, fetched into memory: for web, where files can't be saved
+  /// and the browser's audio element can't send the token.
+  /// From the audio's `url` when it has one (without the token, like [downloadAudio]).
+  Future<(Uint8List, String?)> audioBytes(Recording r, String language, void Function(double) onProgress) async {
+    final external = externalAudioUrl(r, language);
+    final response = await dio.get<List<int>>(external ?? _audioUrl(r, language),
+      options: external == null ? authOptions(responseType: ResponseType.bytes) : Options(responseType: ResponseType.bytes),
+      onReceiveProgress: (received, total) { if (total > 0) onProgress(received / total); });
+    return (Uint8List.fromList(response.data!), response.headers.value('content-type')?.split(';').first.trim());
   }
 }
 

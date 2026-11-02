@@ -25,13 +25,11 @@ admins. A section also needs its book to be visible, and a chapter its section.
 import re
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
 
 from ..helpers import LANGUAGES, fail
 from ..repository import membership_key, repo
 from ..security import current_user
-from ..storage import get_storage
-from .recordings import public_recording
+from .recordings import audio_response, public_recording
 
 router = APIRouter()
 
@@ -260,13 +258,10 @@ def get_chapter(chapter_id: str, user=Depends(current_user)):
 
 @router.get("/api/chapters/{chapter_id}/audio/{lang}")
 def get_chapter_audio(chapter_id: str, lang: str, user=Depends(current_user)):
-    """Download/stream the chapter's audio file in `lang`."""
+    """Download/stream the chapter's audio file in `lang`; a redirect to the
+    audio's "url" if it has one."""
     chapter = visible_chapter(user, chapter_id)
     entry = chapter["audio"].get(lang)
     if not entry:
         fail(404, "No audio in this language")
-    try:
-        path = get_storage().get(entry["audio_key"])
-    except FileNotFoundError:
-        fail(404, "Audio missing")
-    return FileResponse(path, filename=f"{chapter['name']} ({lang}){path.suffix}")
+    return audio_response(entry, chapter["name"], lang)

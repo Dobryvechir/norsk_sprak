@@ -42,5 +42,11 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Keeps the app's files so it can start offline (see offline_sw.js).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('offline_sw.js').catch(() => {}));
+    }
+  </script>
 </body>
 </html>

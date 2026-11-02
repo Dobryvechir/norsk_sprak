@@ -102,3 +102,13 @@ def test_other_books_use_their_own_index(monkeypatch):
     test_app.app.include_router(bible.book_audio_router("norsk"))
     assert test_app.get("/api/norsk/nb/1/1").content == MP3
     assert test_app.get("/api/norsk/nb/GEN/1").status_code == 404
+
+
+def test_audio_is_readable_from_any_origin(monkeypatch):
+    use_drive(monkeypatch, drive_file)
+    monkeypatch.setattr(bible, "drive_file_id", lambda book, key: "file-1" if key == "nb/GEN/1.mp3" else None)
+    origin = {"Origin": "https://some-other-site.example"}
+    response = client.get("/api/bible/nb/GEN/1", headers=origin)
+    assert response.status_code == 200 and response.headers["access-control-allow-origin"] == "*"
+    missing = client.get("/api/bible/nb/GEN/99", headers=origin)
+    assert missing.status_code == 404 and missing.headers["access-control-allow-origin"] == "*"

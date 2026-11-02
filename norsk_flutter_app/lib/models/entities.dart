@@ -3,6 +3,7 @@ class AppUser {
   final bool systemAdmin;
   const AppUser(this.id, this.email, this.systemAdmin);
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser('${j['id']}', '${j['email']}', j['system_admin'] == true);
+  Map<String, dynamic> toJson() => {'id': id, 'email': email, 'system_admin': systemAdmin};
 }
 
 class StudyGroup {
@@ -28,13 +29,24 @@ class RecordingAudio {
   final String? error;
   /// Timing of sentence i in this audio.
   final List<int> startMs, endMs;
-  const RecordingAudio(this.status, this.createdAt, this.durationSeconds, this.error, this.startMs, this.endMs);
+  /// For a chapter saved on this device: the name of the downloaded audio file (see OfflineChapters).
+  final String? localFile;
+  /// Where the audio file is, when it is not in the server's own storage (e.g. book chapters).
+  /// If set, the audio is fetched from here instead of the server's audio endpoint.
+  final String? url;
+  const RecordingAudio(this.status, this.createdAt, this.durationSeconds, this.error, this.startMs, this.endMs, [this.localFile, this.url]);
   bool get isTranscribing => status == 'pending' || status == 'processing';
   factory RecordingAudio.fromJson(Map<String, dynamic> j) {
     List<int> ints(Object? v) => [for (final x in (v as List?) ?? const []) (x as num).toInt()];
+    final url = j['url'] as String?;
     return RecordingAudio('${j['status']}', '${j['created_at'] ?? ''}', (j['duration_seconds'] as num?)?.toDouble() ?? 0,
-      j['error']?.toString(), ints(j['start_ms']), ints(j['end_ms']));
+      j['error']?.toString(), ints(j['start_ms']), ints(j['end_ms']), j['local_file'] as String?,
+      url == null || url.isEmpty ? null : url);
   }
+  Map<String, dynamic> toJson() => {'status': status, 'created_at': createdAt, 'duration_seconds': durationSeconds,
+    if (error != null) 'error': error, 'start_ms': startMs, 'end_ms': endMs, if (localFile != null) 'local_file': localFile,
+    if (url != null) 'url': url};
+  RecordingAudio withLocalFile(String file) => RecordingAudio(status, createdAt, durationSeconds, error, startMs, endMs, file, url);
 }
 
 /// A recording: per language an optional audio, and per language optional sentence texts.
@@ -51,6 +63,10 @@ class Recording {
     {for (final e in ((j['audio'] as Map?) ?? const {}).entries) '${e.key}': RecordingAudio.fromJson(Map<String, dynamic>.from(e.value as Map))},
     {for (final e in ((j['sentences'] as Map?) ?? const {}).entries) '${e.key}': [for (final t in e.value as List) '$t']},
     j['sectionId'] as String?);
+  /// The same JSON as [Recording.fromJson] reads.
+  Map<String, dynamic> toJson() => {'id': id, 'group_id': groupId, 'name': name, if (sectionId != null) 'sectionId': sectionId,
+    'audio': {for (final e in audio.entries) e.key: e.value.toJson()}, 'sentences': sentences};
+  Recording withAudio(Map<String, RecordingAudio> audio) => Recording(id, groupId, name, audio, sentences, sectionId);
 
   /// Number of sentences: the longest sentence or timing list of any language.
   int get sentenceCount => [

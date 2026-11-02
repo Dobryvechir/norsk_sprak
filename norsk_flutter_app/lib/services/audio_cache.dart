@@ -47,7 +47,7 @@ class AudioCache {
     final tmp = File(p.join((await _dir()).path, '$name.download.partial'));
     try {
       final headers = await api.downloadAudio(r, language, tmp.path, onProgress);
-      return await tmp.rename(p.join(tmp.parent.path, '$name.${_extensionFrom(headers)}'));
+      return await tmp.rename(p.join(tmp.parent.path, '$name.${extensionFrom(headers)}'));
     } catch (_) {
       if (await tmp.exists()) await tmp.delete();
       rethrow;
@@ -62,7 +62,7 @@ class AudioCache {
     }
   }
   /// Extension from the server's Content-Disposition filename, then Content-Type, else mp3.
-  static String _extensionFrom(Headers headers) {
+  static String extensionFrom(Headers headers) {
     final disposition = headers.value('content-disposition') ?? '';
     final encoded = RegExp(r"filename\*=[^']*''([^;]+)").firstMatch(disposition)?.group(1);
     final name = encoded != null ? Uri.decodeComponent(encoded.trim())
