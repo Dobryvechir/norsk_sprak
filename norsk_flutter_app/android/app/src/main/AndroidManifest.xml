@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The server and Google Drive (Media) are reached over the network. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Media: taking pictures, recording video and audio. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="norsk_audio_groups"
         android:name="${applicationName}"

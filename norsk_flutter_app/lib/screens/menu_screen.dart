@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
+import '../services/settings.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
 import 'coming_soon_screen.dart';
 import 'groups_screen.dart';
+import 'media_screen.dart';
 import 'saved_chapters_screen.dart';
 import 'settings_screen.dart';
 /// Main menu shown right after login.
@@ -45,6 +47,8 @@ class _MenuScreenState extends State<MenuScreen> {
         trailing: IconButton(tooltip: context.tr('refresh'), onPressed: loadGroups, icon: const Icon(Icons.refresh)))),
       entry(Icons.headphones, context.tr('menuRecords'), () => open(GroupsScreen(api: widget.api))),
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
+      // Media works with the user's own Google Drive, so it is shown only once their token is set in Settings.
+      if (AppSettings.instance.googleDriveToken.isNotEmpty) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
       entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(const ComingSoonScreen(titleKey: 'menuChat'))),
       entry(Icons.settings, context.tr('menuSettings'), () => open(const SettingsScreen())),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../services/settings.dart';
-/// Language preferences, stored locally on this device.
+/// Language preferences and the personal Google Drive token, stored locally on this device.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
   @override Widget build(BuildContext context) {
@@ -25,6 +25,25 @@ class SettingsScreen extends StatelessWidget {
           for (final e in languageNames.entries) FilterChip(label: Text(e.value),
             selected: settings.textLanguages.contains(e.key), onSelected: (on) => settings.setTextLanguage(e.key, on)),
         ]),
+        const SizedBox(height: 24),
+        const _DriveTokenField(),
       ]))));
   }
+}
+
+/// The personal Google Drive token for Media: saved as typed, only on this device (never on our backend).
+class _DriveTokenField extends StatefulWidget {
+  const _DriveTokenField();
+  @override State<_DriveTokenField> createState() => _DriveTokenFieldState();
+}
+class _DriveTokenFieldState extends State<_DriveTokenField> {
+  late final controller = TextEditingController(text: AppSettings.instance.googleDriveToken);
+  bool hidden = true;
+  @override void dispose() { controller.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => TextField(controller: controller, obscureText: hidden,
+    autocorrect: false, enableSuggestions: false, onChanged: AppSettings.instance.setGoogleDriveToken,
+    decoration: InputDecoration(labelText: context.tr('googleDriveToken'), helperText: context.tr('googleDriveTokenHint'), helperMaxLines: 3,
+      border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.add_to_drive),
+      suffixIcon: IconButton(tooltip: context.tr(hidden ? 'show' : 'hide'), onPressed: () => setState(() => hidden = !hidden),
+        icon: Icon(hidden ? Icons.visibility : Icons.visibility_off))));
 }

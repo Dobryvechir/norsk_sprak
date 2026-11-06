@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/l10n.dart';
 
@@ -10,6 +11,11 @@ class AppSettings extends ChangeNotifier {
   String uiLanguage = defaultLanguage;
   String audioLanguage = 'nb';
   List<String> textLanguages = const ['nb'];
+  /// The user's own Google Drive access token, for Media. Kept only on this device (secure storage),
+  /// never sent to our backend; Media is shown only when it is set.
+  String googleDriveToken = '';
+  static const _secure = FlutterSecureStorage();
+  static const _driveTokenKey = 'google_drive_token';
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -17,6 +23,7 @@ class AppSettings extends ChangeNotifier {
     audioLanguage = _valid(prefs.getString('audio_language')) ?? 'nb';
     final texts = (prefs.getStringList('text_languages') ?? const []).map(_valid).whereType<String>().toSet().toList();
     textLanguages = texts.isEmpty ? const ['nb'] : texts;
+    try { googleDriveToken = await _secure.read(key: _driveTokenKey) ?? ''; } catch (_) { googleDriveToken = ''; }
     notifyListeners();
   }
 
@@ -43,5 +50,12 @@ class AppSettings extends ChangeNotifier {
     textLanguages = [for (final c in languageNames.keys) if (set.contains(c)) c];
     notifyListeners();
     await (await SharedPreferences.getInstance()).setStringList('text_languages', textLanguages);
+  }
+
+  Future<void> setGoogleDriveToken(String token) async {
+    token = token.trim();
+    if (token == googleDriveToken) return;
+    googleDriveToken = token; notifyListeners();
+    token.isEmpty ? await _secure.delete(key: _driveTokenKey) : await _secure.write(key: _driveTokenKey, value: token);
   }
 }
