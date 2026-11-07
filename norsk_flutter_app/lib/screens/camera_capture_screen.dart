@@ -9,11 +9,13 @@ import 'media_save_dialog.dart';
 
 /// Takes a picture or records a video with the camera: shutter or record/pause/stop, camera switch,
 /// flash, zoom and tap-to-focus. The result is kept temporarily on this device and then offered for
-/// saving to Google Drive (see [showMediaSaveDialog]); either way the screen then closes.
+/// saving to Google Drive (see [showMediaSaveDialog]), or handed to [onCaptured] when given (which
+/// must delete it when done); either way the screen then closes.
 class CameraCaptureScreen extends StatefulWidget {
-  final GoogleDrive drive; final MediaKind kind;
-  const CameraCaptureScreen({super.key, required this.drive, required this.kind})
-    : assert(kind != MediaKind.audio);
+  final GoogleDrive? drive; final MediaKind kind;
+  final Future<void> Function(BuildContext context, LocalMedia media, Duration? duration)? onCaptured;
+  const CameraCaptureScreen({super.key, this.drive, required this.kind, this.onCaptured})
+    : assert(kind != MediaKind.audio), assert(drive != null || onCaptured != null);
   @override State<CameraCaptureScreen> createState() => _CameraCaptureScreenState();
 }
 
@@ -176,7 +178,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> with WidgetsB
   Future<void> finish(LocalMedia media, {Duration? duration}) async {
     try { await controller?.pausePreview(); } catch (_) {}
     if (!mounted) { await media.delete(); return; }
-    await showMediaSaveDialog(context, widget.drive, media, duration: duration);
+    final onCaptured = widget.onCaptured;
+    onCaptured != null ? await onCaptured(context, media, duration)
+      : await showMediaSaveDialog(context, widget.drive!, media, duration: duration);
+    await media.delete(); // in case it wasn't
     if (mounted) Navigator.pop(context);
   }
 

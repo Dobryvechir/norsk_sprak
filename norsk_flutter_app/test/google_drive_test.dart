@@ -10,13 +10,16 @@ import 'package:norsk_audio_groups/services/settings.dart';
 class FakeDrive implements HttpClientAdapter {
   /// id → {name, parent, mimeType}
   final files = <String, Map<String, String>>{};
+  /// id → the file's content (its size is in [files] as `size`)
+  final content = <String, List<int>>{};
   final requests = <String>[];
   var _next = 0;
   String? token;
 
-  String add(String name, String parent, {String mimeType = GoogleDrive.folderType}) {
+  String add(String name, String parent, {String mimeType = GoogleDrive.folderType, List<int>? bytes}) {
     final id = 'id${_next++}';
-    files[id] = {'name': name, 'parent': parent, 'mimeType': mimeType};
+    files[id] = {'name': name, 'parent': parent, 'mimeType': mimeType, if (bytes != null) 'size': '${bytes.length}'};
+    if (bytes != null) content[id] = bytes;
     return id;
   }
 
@@ -57,8 +60,15 @@ class FakeDrive implements HttpClientAdapter {
       return json({}, 200, {'location': ['https://upload.example/session/$id']});
     }
     if (o.method == 'PUT' && path.startsWith('/session/')) {
-      await body?.drain<void>();
-      return json({'id': path.split('/').last});
+      final id = path.split('/').last, bytes = <int>[];
+      if (body != null) { await for (final chunk in body) { bytes.addAll(chunk); } }
+      content[id] = bytes;
+      files[id]!['size'] = '${bytes.length}';
+      return json({'id': id});
+    }
+    if (o.method == 'GET' && path.startsWith('/drive/v3/files/') && o.uri.queryParameters['alt'] == 'media') {
+      final bytes = content[path.split('/').last];
+      return bytes == null ? json({'error': {'message': 'File not found'}}, 404) : ResponseBody.fromBytes(bytes, 200);
     }
     if (o.method == 'DELETE') {
       return files.remove(path.split('/').last) == null ? json({'error': {'message': 'File not found'}}, 404) : json({}, 204);

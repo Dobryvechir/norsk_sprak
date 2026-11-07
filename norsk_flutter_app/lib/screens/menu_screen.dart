@@ -6,6 +6,7 @@ import '../services/settings.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
 import 'coming_soon_screen.dart';
+import 'documents_screen.dart';
 import 'groups_screen.dart';
 import 'media_screen.dart';
 import 'saved_chapters_screen.dart';
@@ -47,6 +48,8 @@ class _MenuScreenState extends State<MenuScreen> {
         trailing: IconButton(tooltip: context.tr('refresh'), onPressed: loadGroups, icon: const Icon(Icons.refresh)))),
       entry(Icons.headphones, context.tr('menuRecords'), () => open(GroupsScreen(api: widget.api))),
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
+      // Documents are kept on this device; only their synchronization needs the Google Drive token.
+      entry(Icons.folder_copy, context.tr('menuDocuments'), () => open(const DocumentsScreen())),
       // Media works with the user's own Google Drive, so it is shown only once their token is set in Settings.
       if (AppSettings.instance.googleDriveToken.isNotEmpty) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),

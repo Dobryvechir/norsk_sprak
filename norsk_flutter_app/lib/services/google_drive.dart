@@ -10,8 +10,11 @@ import 'settings.dart';
 /// A file on Google Drive.
 class DriveFile {
   final String id, name, mimeType;
-  const DriveFile(this.id, this.name, this.mimeType);
-  factory DriveFile.fromJson(Map<String, dynamic> j) => DriveFile('${j['id']}', '${j['name'] ?? ''}', '${j['mimeType'] ?? ''}');
+  /// In bytes, when asked for and known (Google Docs, Sheets etc. have none).
+  final int? size;
+  const DriveFile(this.id, this.name, this.mimeType, {this.size});
+  factory DriveFile.fromJson(Map<String, dynamic> j) => DriveFile('${j['id']}', '${j['name'] ?? ''}', '${j['mimeType'] ?? ''}',
+    size: j['size'] == null ? null : int.tryParse('${j['size']}'));
 }
 
 /// One page of [DriveFile]s; [nextPageToken] is null on the last page.
@@ -113,6 +116,28 @@ class GoogleDrive {
     return DrivePage([for (final f in data['files'] as List) DriveFile.fromJson(Map<String, dynamic>.from(f as Map))],
       data['nextPageToken'] as String?);
   });
+
+  /// Every file (not folder) in [folderId], with its size.
+  Future<List<DriveFile>> listAll(String folderId) async {
+    final result = <DriveFile>[];
+    String? token;
+    do {
+      final data = await _run(() async => (await _dio.get(_api, options: _auth(), queryParameters: {
+        'q': '${_quote(folderId)} in parents and trashed = false and mimeType != ${_quote(folderType)}',
+        'orderBy': 'name', 'pageSize': 1000, 'fields': 'nextPageToken,files(id,name,mimeType,size)', 'spaces': 'drive',
+        if (token != null) 'pageToken': token,
+      })).data as Map);
+      result.addAll([for (final f in data['files'] as List) DriveFile.fromJson(Map<String, dynamic>.from(f as Map))]);
+      token = data['nextPageToken'] as String?;
+    } while (token != null);
+    return result;
+  }
+
+  /// Uploads the file at [path] (not on web) as [name] into [folderId]; returns the new file's id.
+  Future<String> uploadFile(String folderId, String name, String mimeType, String path) async {
+    final file = File(path);
+    return _uploadData(folderId, name, mimeType, file.openRead(), await file.length(), null);
+  }
 
   /// Uploads [media] as [name] into [folderId]; returns the new file's id.
   Future<String> uploadMedia(String folderId, String name, LocalMedia media, {ProgressCallback? onProgress}) async {
