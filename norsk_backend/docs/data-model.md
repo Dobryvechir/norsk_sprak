@@ -28,9 +28,19 @@ users ──< memberships >── groups ──< recordings ──1:1── usag
   "id": "3aa0cbcf8a8b43129dd1761c29b6e38e",
   "name": "Norskkurs A2",
   "ai": {"provider": "openai", "model": "whisper-1", "monthly_audio_minutes_limit": null},
-  "created_at": "2026-10-16T12:00:00+00:00"
+  "created_at": "2026-10-16T12:00:00+00:00",
+  "anonymous": false,            // chat settings; missing ones count as these defaults
+  "family": false,
+  "subgroupLimitPerYear": 20,
+  "chatPerDayKb": 500,
+  "expirationDays": 7
 }
 ```
+
+## Chat kinds
+
+`subgroups`, `chat_profiles`, `chat_messages`, `chat_meta`, `chat_inbox`, `chat_usage`,
+`chat_subgroup_counts` and `chat_locations` are described in [chat.md](chat.md).
 
 ## `memberships`  (key: `<group_id>_<user_id>`)
 

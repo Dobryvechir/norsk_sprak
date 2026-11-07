@@ -24,6 +24,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera is used to take pictures and record videos in Media.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is shared only with the members of your family chats, when one of them uses Find location.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>The microphone is used to record audio and the sound of videos in Media.</string>
 	<key>LSRequiresIPhoneOS</key>

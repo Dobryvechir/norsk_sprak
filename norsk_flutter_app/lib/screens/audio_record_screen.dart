@@ -10,10 +10,12 @@ import 'media_save_dialog.dart';
 
 /// Records audio from the microphone: record, pause/resume, stop, with the time and a level meter.
 /// The recording is kept temporarily on this device and then offered for saving to Google Drive
-/// (see [showMediaSaveDialog]); either way the screen then closes.
+/// (see [showMediaSaveDialog]), or handed to [onCaptured] when given (which must delete it when done);
+/// either way the screen then closes.
 class AudioRecordScreen extends StatefulWidget {
-  final GoogleDrive drive;
-  const AudioRecordScreen({super.key, required this.drive});
+  final GoogleDrive? drive;
+  final Future<void> Function(BuildContext context, LocalMedia media, Duration? duration)? onCaptured;
+  const AudioRecordScreen({super.key, this.drive, this.onCaptured}) : assert(drive != null || onCaptured != null);
   @override State<AudioRecordScreen> createState() => _AudioRecordScreenState();
 }
 
@@ -87,7 +89,10 @@ class _AudioRecordScreenState extends State<AudioRecordScreen> {
       if (path == null) throw StateError(trNow('recordingFailed'));
       final media = await MediaTemp.adopt(XFile(path, mimeType: mimeType), MediaKind.audio, mimeType: mimeType);
       if (!mounted) { await media.delete(); return; }
-      await showMediaSaveDialog(context, widget.drive, media, duration: elapsed);
+      final onCaptured = widget.onCaptured;
+      onCaptured != null ? await onCaptured(context, media, elapsed)
+        : await showMediaSaveDialog(context, widget.drive!, media, duration: elapsed);
+      await media.delete(); // in case it wasn't
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() { error = '$e'; busy = false; });

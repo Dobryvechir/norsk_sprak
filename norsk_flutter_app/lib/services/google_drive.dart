@@ -134,9 +134,9 @@ class GoogleDrive {
   }
 
   /// Uploads the file at [path] (not on web) as [name] into [folderId]; returns the new file's id.
-  Future<String> uploadFile(String folderId, String name, String mimeType, String path) async {
+  Future<String> uploadFile(String folderId, String name, String mimeType, String path, {ProgressCallback? onProgress}) async {
     final file = File(path);
-    return _uploadData(folderId, name, mimeType, file.openRead(), await file.length(), null);
+    return _uploadData(folderId, name, mimeType, file.openRead(), await file.length(), onProgress);
   }
 
   /// Uploads [media] as [name] into [folderId]; returns the new file's id.
@@ -147,8 +147,8 @@ class GoogleDrive {
   }
 
   /// Uploads [bytes] as [name] into [folderId]; returns the new file's id.
-  Future<String> uploadBytes(String folderId, String name, String mimeType, Uint8List bytes) =>
-    _uploadData(folderId, name, mimeType, bytes, bytes.length, null);
+  Future<String> uploadBytes(String folderId, String name, String mimeType, Uint8List bytes, {ProgressCallback? onProgress}) =>
+    _uploadData(folderId, name, mimeType, bytes, bytes.length, onProgress);
 
   /// A resumable upload: one request with the file's details, then the content itself.
   Future<String> _uploadData(String folderId, String name, String mimeType, Object data, int length, ProgressCallback? onProgress) => _run(() async {
@@ -179,6 +179,16 @@ class GoogleDrive {
     try { await _dio.delete('$_api/$id', options: _auth()); }
     on DioException catch (e) { if (e.response?.statusCode != 404) rethrow; } // already gone
   });
+
+  /// Lets anyone with the link open file [id], and returns that link (for Chat).
+  Future<String> shareWithAnyone(String id) => _run(() async {
+    await _dio.post('$_api/$id/permissions', data: {'role': 'reader', 'type': 'anyone'}, options: _auth());
+    final r = await _dio.get('$_api/$id', queryParameters: {'fields': 'webViewLink'}, options: _auth());
+    return '${(r.data as Map)['webViewLink'] ?? 'https://drive.google.com/file/d/$id/view'}';
+  });
+
+  /// The folder for files sent in Chat: `/chat` (created when missing).
+  Future<String> chatFolder() async => (await folder('chat', create: true))!;
 
   // ----- Media: /media/<kind.folder>/<name> with its icon in /media/<kind.iconFolder>/<name> -----
 

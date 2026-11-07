@@ -27,6 +27,7 @@ dependencies:
   url_launcher: ^6.3.3
   archive: ^4.6.0
   xml: ^7.1.0
+  geolocator: ^14.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

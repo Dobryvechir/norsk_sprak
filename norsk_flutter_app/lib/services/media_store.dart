@@ -148,9 +148,12 @@ Future<(Uint8List, String)> makeIcon(LocalMedia media, {Duration? duration}) asy
 }
 
 /// [bytes] (an image) scaled down to at most [iconSize] pixels on its longer side, as PNG.
-Future<Uint8List> _shrink(Uint8List bytes) async {
+Future<Uint8List> _shrink(Uint8List bytes) => shrinkImage(bytes, iconSize);
+
+/// [bytes] (an image) scaled down to at most [maxSide] pixels on its longer side, as PNG.
+Future<Uint8List> shrinkImage(Uint8List bytes, int maxSide) async {
   final codec = await ui.instantiateImageCodecWithSize(await ui.ImmutableBuffer.fromUint8List(bytes), getTargetSize: (w, h) {
-    final scale = math.min(1.0, iconSize / math.max(w, h));
+    final scale = math.min(1.0, maxSide / math.max(w, h));
     return ui.TargetImageSize(width: math.max(1, (w * scale).round()), height: math.max(1, (h * scale).round()));
   });
   final image = (await codec.getNextFrame()).image;

@@ -18,10 +18,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .chat import purge_expired
 from .config import settings
 from .migrations import upgrade_recordings
 from .repository import repo
-from .routes import admin, auth, bible, books, groups, recordings
+from .routes import admin, auth, bible, books, chat, groups, recordings
 from .routes.admin import new_user
 from .routes.auth import find_user_by_email
 
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     create_bootstrap_admin()
     upgrade_recordings()
     books.seed_sample_books()
+    purge_expired(force=True)
     yield
 
 
@@ -90,6 +92,7 @@ app.include_router(groups.router)
 app.include_router(recordings.router)
 app.include_router(books.router)
 app.include_router(bible.router)
+app.include_router(chat.router)
 
 
 @app.get("/api/health")

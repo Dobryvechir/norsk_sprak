@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
+import 'chat_settings_dialog.dart';
 class AdminScreen extends StatefulWidget {
   final Api api; final StudyGroup group;
   const AdminScreen({super.key, required this.api, required this.group});
@@ -50,8 +51,10 @@ class _AdminScreenState extends State<AdminScreen> {
   }
   @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(context.tr('manageGroup', {'name': widget.group.name})), actions: [IconButton(tooltip: context.tr('refresh'), onPressed: refresh, icon: const Icon(Icons.refresh))]),
     body: Column(children: [
-      Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 8, children: [
+      Padding(padding: const EdgeInsets.all(12), child: Wrap(spacing: 8, runSpacing: 8, children: [
         FilledButton.icon(onPressed: addMember, icon: const Icon(Icons.person_add), label: Text(context.tr('addMember'))),
+        OutlinedButton.icon(onPressed: () => showChatSettingsDialog(context, widget.api, widget.group),
+          icon: const Icon(Icons.chat_bubble_outline), label: Text(context.tr('chatSettings'))),
       ])),
       Expanded(child: FutureBuilder<List<Membership>>(future: future, builder: (ctx,snap) {
         if (!snap.hasData) return Center(child: snap.hasError ? Text(context.tr('adminPermissionRequired', {'error': readableError(snap.error!)})) : const CircularProgressIndicator());

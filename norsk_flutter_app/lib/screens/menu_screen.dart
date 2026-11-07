@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
+import '../services/chat_api.dart';
 import '../services/settings.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
-import 'coming_soon_screen.dart';
+import 'chat_screen.dart';
 import 'documents_screen.dart';
 import 'groups_screen.dart';
 import 'media_screen.dart';
@@ -19,8 +20,11 @@ class MenuScreen extends StatefulWidget {
 }
 class _MenuScreenState extends State<MenuScreen> {
   List<StudyGroup> groups = const [];
+  /// Answers family members' "Find location" while the app runs (see ChatLocationResponder).
+  late final locationResponder = ChatLocationResponder(ChatApi(widget.api));
   @override void initState() {
     super.initState();
+    locationResponder.start();
     final restored = widget.api.restoredGroups;
     widget.api.restoredGroups = null;
     if (restored != null) { groups = restored; } else { loadGroups(); }
@@ -35,7 +39,8 @@ class _MenuScreenState extends State<MenuScreen> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     loadGroups(); // roles may have changed meanwhile
   }
-  Future<void> logout() async { await widget.api.logout(); widget.onLogout(); }
+  @override void dispose() { locationResponder.stop(); super.dispose(); }
+  Future<void> logout() async { locationResponder.stop(); await widget.api.logout(); widget.onLogout(); }
   Widget entry(IconData icon, String label, VoidCallback onTap) => Card(child: ListTile(
     leading: Icon(icon), title: Text(label), trailing: const Icon(Icons.chevron_right), onTap: onTap));
   @override Widget build(BuildContext context) => Scaffold(
@@ -53,7 +58,7 @@ class _MenuScreenState extends State<MenuScreen> {
       // Media works with the user's own Google Drive, so it is shown only once their token is set in Settings.
       if (AppSettings.instance.googleDriveToken.isNotEmpty) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
-      entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(const ComingSoonScreen(titleKey: 'menuChat'))),
+      entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(ChatScreen(api: widget.api))),
       entry(Icons.settings, context.tr('menuSettings'), () => open(const SettingsScreen())),
       if (widget.api.hasAdminRights(groups)) entry(Icons.admin_panel_settings, context.tr('menuAdmin'), () => open(AdminMenuScreen(api: widget.api))),
       entry(Icons.logout, context.tr('menuLogout'), logout),

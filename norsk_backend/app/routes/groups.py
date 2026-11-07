@@ -1,11 +1,12 @@
-"""Group-admin endpoints: membership, AI settings and usage reports."""
+"""Group-admin endpoints: membership, AI settings, chat settings and usage reports."""
 
 from fastapi import APIRouter, Depends
 
+from ..chat import group_chat_settings
 from ..helpers import fail
 from ..repository import membership_key, repo
-from ..schemas import AIConfigRequest, MemberRequest
-from ..security import ADMIN, ROLES, current_user, require_role
+from ..schemas import AIConfigRequest, GroupChatSettings, MemberRequest
+from ..security import ADMIN, ROLES, current_user, get_membership, require_role
 
 router = APIRouter()
 
@@ -60,6 +61,23 @@ def set_ai_config(gid: str, data: AIConfigRequest, user=Depends(current_user)):
     group["ai"] = data.model_dump()
     repo.put("groups", gid, group)
     return group["ai"]
+
+
+@router.get("/api/groups/{gid}/settings")
+def get_chat_settings(gid: str, user=Depends(current_user)):
+    """The group's chat settings (anonymous, family, limits), for any member."""
+    get_membership(user, gid)
+    return group_chat_settings(repo.get("groups", gid))
+
+
+@router.patch("/api/groups/{gid}/settings")
+def set_chat_settings(gid: str, data: GroupChatSettings, user=Depends(current_user)):
+    """Change some of the group's chat settings; fields left out keep their value."""
+    require_role(user, gid, [ADMIN])
+    group = repo.get("groups", gid)
+    group.update({**group_chat_settings(group), **data.model_dump(exclude_none=True)})
+    repo.put("groups", gid, group)
+    return group_chat_settings(group)
 
 
 @router.get("/api/groups/{gid}/usage")

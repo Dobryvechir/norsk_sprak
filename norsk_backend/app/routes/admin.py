@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from ..chat import GROUP_CHAT_DEFAULTS
 from ..helpers import fail, new_id, utc_now_iso
 from ..repository import repo
 from ..schemas import CreateGroupRequest, CreateUserRequest
@@ -39,13 +40,16 @@ def create_user(data: CreateUserRequest, user=Depends(current_user)):
 
 @router.post("/api/admin/groups")
 def create_group(data: CreateGroupRequest, user=Depends(current_user)):
-    """Create a new, empty group."""
+    """Create a new, empty group, with chat settings (defaults for those left out)."""
     require_system_admin(user)
+    chosen = data.model_dump(exclude={"name"}, exclude_none=True)
     group = {
         "id": new_id(),
         "name": data.name,
         "ai": dict(DEFAULT_AI_CONFIG),
         "created_at": utc_now_iso(),
+        **GROUP_CHAT_DEFAULTS,
+        **chosen,
     }
     repo.put("groups", group["id"], group)
     return group

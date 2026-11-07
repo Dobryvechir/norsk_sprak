@@ -5,6 +5,8 @@ FastAPI validates incoming JSON against these models automatically and replies
 with 422 and a description of the problem if it doesn't match.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -18,8 +20,68 @@ class CreateUserRequest(BaseModel):
     password: str = Field(min_length=10)
 
 
-class CreateGroupRequest(BaseModel):
+class GroupChatSettings(BaseModel):
+    """A group's chat settings (see chat.GROUP_CHAT_DEFAULTS). In a PATCH, fields
+    left out (null) keep their current value."""
+
+    anonymous: bool | None = None
+    family: bool | None = None
+    subgroupLimitPerYear: int | None = Field(default=None, ge=0, le=10000)
+    chatPerDayKb: int | None = Field(default=None, ge=1, le=100000)
+    expirationDays: int | None = Field(default=None, ge=1, le=3650)
+
+
+class CreateGroupRequest(GroupChatSettings):
+    """A new group; chat settings left out get their defaults."""
+
     name: str = Field(min_length=1, max_length=100)
+
+
+# --- Chat ---
+
+class ChatProfileRequest(BaseModel):
+    """The name shown in Chat and, optionally, a new small photo (base64 PNG or
+    JPEG, at most 64 kB). Without `photo` the current photo is kept."""
+
+    displayName: str = Field(min_length=1, max_length=60)
+    photo: str | None = Field(default=None, max_length=90000)
+
+
+class ChatAttachment(BaseModel):
+    """A link to a file the sender shared from their own Google Drive."""
+
+    kind: Literal["picture", "audio", "video", "file"]
+    name: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=500)  # https://drive.google.com/... or docs.google.com
+    driveId: str = Field(default="", max_length=200, pattern=r"^[A-Za-z0-9_-]*$")
+    mimeType: str = Field(default="", max_length=100)
+    size: int | None = Field(default=None, ge=0)
+
+
+class ChatMessageRequest(BaseModel):
+    text: str = Field(default="", max_length=4000)
+    attachments: list[ChatAttachment] = Field(default_factory=list, max_length=10)
+
+
+class CreateSubgroupRequest(BaseModel):
+    groupId: str
+    name: str = Field(min_length=1, max_length=100)
+    family: bool = False
+
+
+class InviteRequest(BaseModel):
+    userIds: list[str] = Field(min_length=1, max_length=50)
+
+
+class DirectChatRequest(BaseModel):
+    groupId: str
+    userId: str
+
+
+class LocationRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    accuracy: float | None = Field(default=None, ge=0)
 
 
 class MemberRequest(BaseModel):

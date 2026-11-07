@@ -6,10 +6,11 @@ import '../services/media_store.dart';
 import 'media_view_screen.dart';
 
 /// The saved media of one [kind], 10 per page: the names and icons come from
-/// `/media/<kind.iconFolder>` on Google Drive. Each item can be viewed or deleted.
+/// `/media/<kind.iconFolder>` on Google Drive. Each item can be viewed or deleted; with [picking] a tap
+/// instead closes the screen with the media file itself (a [DriveFile]), for Chat.
 class MediaListScreen extends StatefulWidget {
-  final GoogleDrive drive; final MediaKind kind;
-  const MediaListScreen({super.key, required this.drive, required this.kind});
+  final GoogleDrive drive; final MediaKind kind; final bool picking;
+  const MediaListScreen({super.key, required this.drive, required this.kind, this.picking = false});
   @override State<MediaListScreen> createState() => _MediaListScreenState();
 }
 
@@ -71,6 +72,15 @@ class _MediaListScreenState extends State<MediaListScreen> {
   void view(DriveFile f) => Navigator.push(context, MaterialPageRoute(fullscreenDialog: true,
     builder: (_) => MediaViewScreen(drive: widget.drive, kind: kind, name: f.name)));
 
+  Future<void> pick(DriveFile icon) async {
+    final messenger = ScaffoldMessenger.of(context), navigator = Navigator.of(context);
+    try {
+      final file = await widget.drive.findMedia(kind, icon.name);
+      if (file == null) throw DriveException(trNow('mediaNotFound', {'name': icon.name}));
+      navigator.pop(file);
+    } catch (e) { messenger.showSnackBar(SnackBar(content: Text(e is DriveException ? e.message : '$e'))); }
+  }
+
   String get titleKey => switch (kind) { MediaKind.picture => 'mediaPictures', MediaKind.video => 'mediaVideos', MediaKind.audio => 'mediaAudio' };
 
   @override Widget build(BuildContext context) => Scaffold(
@@ -92,7 +102,8 @@ class _MediaListScreenState extends State<MediaListScreen> {
         Expanded(child: files.isEmpty ? Center(child: Text(context.tr('mediaEmpty'))) : Center(child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640), child: ListView.builder(padding: const EdgeInsets.all(12), itemCount: files.length,
             itemBuilder: (_, i) => _MediaTile(file: files[i], kind: kind, icon: icon(files[i]),
-              onView: () => view(files[i]), onDelete: () => delete(files[i])))))),
+              picking: widget.picking, onView: () => widget.picking ? pick(files[i]) : view(files[i]),
+              onDelete: () => delete(files[i])))))),
         if (page > 0 || hasNext) SafeArea(top: false, child: Padding(padding: const EdgeInsets.only(bottom: 8),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             IconButton(tooltip: context.tr('previousPage'), onPressed: page > 0 ? () => goTo(page - 1) : null, icon: const Icon(Icons.chevron_left)),
@@ -105,9 +116,9 @@ class _MediaListScreenState extends State<MediaListScreen> {
 }
 
 class _MediaTile extends StatelessWidget {
-  final DriveFile file; final MediaKind kind; final Future<Uint8List> icon;
+  final DriveFile file; final MediaKind kind; final Future<Uint8List> icon; final bool picking;
   final VoidCallback onView, onDelete;
-  const _MediaTile({required this.file, required this.kind, required this.icon, required this.onView, required this.onDelete});
+  const _MediaTile({required this.file, required this.kind, required this.icon, required this.onView, required this.onDelete, this.picking = false});
   @override Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final placeholder = ColoredBox(color: theme.colorScheme.primaryContainer, child: Icon(kind.icon, color: theme.colorScheme.onPrimaryContainer));
@@ -118,9 +129,12 @@ class _MediaTile extends StatelessWidget {
           : Image.memory(snap.data!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder)))),
       const SizedBox(width: 12),
       Expanded(child: Text(file.name, style: theme.textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis)),
-      IconButton(tooltip: context.tr(kind == MediaKind.audio ? 'listen' : 'view'), onPressed: onView,
-        icon: Icon(kind == MediaKind.picture ? Icons.visibility : Icons.play_circle_outline)),
-      IconButton(tooltip: context.tr('delete'), onPressed: onDelete, icon: Icon(Icons.delete_outline, color: theme.colorScheme.error)),
+      if (picking) IconButton(tooltip: context.tr('chatSend'), onPressed: onView, icon: const Icon(Icons.send))
+      else ...[
+        IconButton(tooltip: context.tr(kind == MediaKind.audio ? 'listen' : 'view'), onPressed: onView,
+          icon: Icon(kind == MediaKind.picture ? Icons.visibility : Icons.play_circle_outline)),
+        IconButton(tooltip: context.tr('delete'), onPressed: onDelete, icon: Icon(Icons.delete_outline, color: theme.colorScheme.error)),
+      ],
     ]))));
   }
 }

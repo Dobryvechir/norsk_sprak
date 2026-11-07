@@ -27,7 +27,7 @@ account; deliberately indistinguishable).
 | Method | Path | Who | Body → Response |
 |---|---|---|---|
 | POST | `/api/admin/users` | sysadmin | `{email, password (≥10 chars)}` → public user. `409` if email taken |
-| POST | `/api/admin/groups` | sysadmin | `{name (1–100 chars)}` → group with default AI config |
+| POST | `/api/admin/groups` | sysadmin | `{name (1–100 chars), anonymous?, family?, subgroupLimitPerYear?, chatPerDayKb?, expirationDays?}` → group with default AI config and chat settings (see chat.md) |
 
 ## Group management (`routes/groups.py`)
 
@@ -37,6 +37,8 @@ account; deliberately indistinguishable).
 | PUT | `/api/groups/{gid}/members/{user_id}` | admin | `{role?, enabled?, quota?}` → membership. Creates or **replaces** |
 | PATCH | `/api/groups/{gid}/ai-config` | admin | `{provider?, model?, monthly_audio_minutes_limit?}` → new AI config |
 | GET | `/api/groups/{gid}/usage` | admin | → list of usage records |
+| GET | `/api/groups/{gid}/settings` | member | → chat settings `{anonymous, family, subgroupLimitPerYear, chatPerDayKb, expirationDays}` |
+| PATCH | `/api/groups/{gid}/settings` | admin | any of those fields → new chat settings (fields left out are kept) |
 
 Notes:
 - `role` defaults to `"viewer"`; must be `viewer`, `uploader` or `admin` (else 422).
@@ -73,6 +75,11 @@ audio. Errors: `404 Sentence not found` (index ≥ number of sentences) ·
 `404 No timing for this sentence in this language` (no audio in `lang`, or it has
 no timing at `index`) · `422 Invalid timestamp range` (end must be after start
 and at most 0.5 s past the end of the audio) · `422 Nothing to change`.
+
+## Chat (`routes/chat.py`)
+
+Any logged-in user; what each user may see and do is described in [chat.md](chat.md),
+which also lists the endpoints.
 
 ## Books, sections, chapters (`routes/books.py`)
 
