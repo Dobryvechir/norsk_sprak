@@ -1,10 +1,39 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in/google_sign_in.dart' show GoogleSignInException, GoogleSignInExceptionCode;
+import 'package:norsk_audio_groups/services/drive_auth.dart';
 import 'package:norsk_audio_groups/services/google_drive.dart';
 import 'package:norsk_audio_groups/services/media_store.dart';
 import 'package:norsk_audio_groups/services/settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Google Sign-In without Google: [silent] is the token available without showing anything.
+class FakeTokens implements DriveTokenSource {
+  FakeTokens(this.silent);
+  String? silent;
+  /// What the sign-in shown to the user gives, or throws.
+  String interactive = 'good';
+  Object? interactiveError;
+  /// The token available silently once the rejected one is cleared.
+  String? afterClear;
+  var interactiveCalls = 0, signOuts = 0, disconnects = 0;
+  final cleared = <String>[];
+  @override bool configured = true;
+  @override String? email;
+  @override Future<String?> silentToken() async => silent;
+  @override Future<String> interactiveToken() async {
+    interactiveCalls++;
+    await Future<void>.delayed(Duration.zero);
+    if (interactiveError != null) throw interactiveError!;
+    return interactive;
+  }
+  @override Future<void> clearToken(String token) async { cleared.add(token); if (afterClear != null) silent = afterClear; }
+  @override Future<void> signOut() async => signOuts++;
+  @override Future<void> disconnect() async => disconnects++;
+}
 
 /// A tiny in-memory Google Drive: enough of files.list / create / delete / upload for [GoogleDrive].
 class FakeDrive implements HttpClientAdapter {
@@ -15,6 +44,10 @@ class FakeDrive implements HttpClientAdapter {
   final requests = <String>[];
   var _next = 0;
   String? token;
+  /// The only token accepted.
+  String goodToken = 'good';
+  /// Called for each request before the token is checked.
+  void Function(RequestOptions)? onRequest;
 
   String add(String name, String parent, {String mimeType = GoogleDrive.folderType, List<int>? bytes}) {
     final id = 'id${_next++}';
@@ -30,7 +63,8 @@ class FakeDrive implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
     requests.add('${o.method} ${o.uri.path}');
     token = o.headers['Authorization'] as String?;
-    if (token != 'Bearer good') return json({'error': {'code': 401, 'message': 'Invalid Credentials'}}, 401);
+    onRequest?.call(o);
+    if (token != 'Bearer $goodToken') return json({'error': {'code': 401, 'message': 'Invalid Credentials'}}, 401);
     final path = o.uri.path;
     if (o.method == 'GET' && path == '/drive/v3/files') {
       final q = o.uri.queryParameters['q']!;
@@ -83,10 +117,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late FakeDrive fake;
   late GoogleDrive drive;
+  late FakeTokens tokens;
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     fake = FakeDrive();
-    drive = GoogleDrive(dio: Dio()..httpClientAdapter = fake);
-    AppSettings.instance.googleDriveToken = 'good';
+    tokens = FakeTokens('good');
+    drive = GoogleDrive(dio: Dio()..httpClientAdapter = fake, auth: DriveAuth(tokens));
+    AppSettings.instance.driveConnected = true;
   });
 
   test('folders are created when missing and reused afterwards', () async {
@@ -126,15 +163,103 @@ void main() {
     expect(second.nextPageToken, isNull);
   });
 
-  test('a bad token gives a readable error', () async {
-    AppSettings.instance.googleDriveToken = 'expired';
-    expect(drive.folder('media'), throwsA(isA<DriveException>().having((e) => e.message, 'message', contains('expired'))));
+  test('a token Drive keeps refusing gives a readable error, after one renewal', () async {
+    tokens.silent = 'expired';
+    await expectLater(drive.folder('media'), throwsA(isA<DriveException>().having((e) => e.message, 'message', contains('expired'))));
+    expect(fake.requests, hasLength(2));
+    expect(tokens.cleared, ['expired']);
   });
 
-  test('without a token nothing is sent', () async {
-    AppSettings.instance.googleDriveToken = '';
+  test('when not connected nothing is sent', () async {
+    AppSettings.instance.driveConnected = false;
     await expectLater(drive.folder('media'), throwsA(isA<DriveException>()));
     expect(fake.requests, isEmpty);
+  });
+
+  test('an expired token is renewed silently and the request repeated', () async {
+    tokens..silent = 'expired'..afterClear = 'good';
+    expect(await drive.folder('media', create: true), isNotNull);
+    expect(tokens.cleared, ['expired']);
+    expect(tokens.interactiveCalls, 0, reason: 'nothing is shown to the user');
+    expect(fake.files.values.where((f) => f['name'] == 'media'), hasLength(1));
+  });
+
+  test('a token expiring during a file upload: the upload starts over and reads the file anew', () async {
+    final dir = await Directory.systemTemp.createTemp('upload');
+    try {
+      final file = File('${dir.path}/a.bin')..writeAsBytesSync([1, 2, 3, 4]);
+      tokens.afterClear = 'new';
+      var expired = false;
+      fake.onRequest = (o) {
+        if (o.method == 'PUT' && !expired) { expired = true; fake.goodToken = 'new'; }
+      };
+      final id = await drive.uploadFile('parent', 'a.bin', 'application/octet-stream', file.path);
+      expect(fake.content[id], [1, 2, 3, 4]);
+      expect(expired, isTrue);
+      expect(tokens.cleared, ['good']);
+    } finally {
+      await dir.delete(recursive: true);
+    }
+  });
+
+  group('DriveAuth', () {
+    test('without a silent token the sign-in is shown, and only once for parallel calls', () async {
+      tokens.silent = null;
+      final auth = DriveAuth(tokens);
+      expect(await Future.wait([auth.token(), auth.token(), auth.token()]), ['good', 'good', 'good']);
+      expect(tokens.interactiveCalls, 1);
+    });
+
+    test('a cancelled or blocked sign-in asks to reconnect', () async {
+      tokens..silent = null..interactiveError = const GoogleSignInException(code: GoogleSignInExceptionCode.uiUnavailable);
+      await expectLater(DriveAuth(tokens).token(), throwsA(isA<DriveException>().having((e) => e.message, 'message', contains('Reconnect'))));
+    });
+
+    test('connecting saves the connection and the address', () async {
+      AppSettings.instance.driveConnected = false;
+      tokens.email = 'a@b.no';
+      expect(await DriveAuth(tokens).connect(), isTrue);
+      expect((AppSettings.instance.driveConnected, AppSettings.instance.driveEmail), (true, 'a@b.no'));
+      final prefs = await SharedPreferences.getInstance();
+      expect((prefs.getBool('drive_connected'), prefs.getString('drive_email')), (true, 'a@b.no'));
+    });
+
+    test('cancelling leaves it unconnected without an error; other failures are reported', () async {
+      AppSettings.instance.driveConnected = false;
+      tokens.interactiveError = const GoogleSignInException(code: GoogleSignInExceptionCode.canceled);
+      expect(await DriveAuth(tokens).connect(), isFalse);
+      expect(AppSettings.instance.driveConnected, isFalse);
+      tokens.interactiveError = const GoogleSignInException(code: GoogleSignInExceptionCode.clientConfigurationError, description: 'bad client');
+      await expectLater(DriveAuth(tokens).connect(), throwsA(isA<DriveException>().having((e) => e.message, 'message', contains('bad client'))));
+      expect(AppSettings.instance.driveConnected, isFalse);
+    });
+
+    test('without a client ID it cannot be connected', () async {
+      tokens.configured = false;
+      await expectLater(DriveAuth(tokens).connect(), throwsA(isA<DriveException>()));
+      expect(tokens.interactiveCalls, 0);
+    });
+
+    test('disconnecting forgets it here even when Google cannot be reached', () async {
+      await AppSettings.instance.setDriveConnection(true, email: 'a@b.no');
+      await DriveAuth(_FailingDisconnect()).disconnect();
+      expect((AppSettings.instance.driveConnected, AppSettings.instance.driveEmail), (false, null));
+      expect((await SharedPreferences.getInstance()).getBool('drive_connected'), isFalse);
+    });
+
+    test('logging out of the app ends the connection without revoking the access', () async {
+      await AppSettings.instance.setDriveConnection(true, email: 'a@b.no');
+      DriveAuth(tokens).signOut();
+      await Future<void>.delayed(Duration.zero);
+      expect(AppSettings.instance.driveConnected, isFalse);
+      expect((tokens.signOuts, tokens.disconnects), (1, 0));
+    });
+
+    test('the connection is restored on start, and the old pasted token is no longer read', () async {
+      SharedPreferences.setMockInitialValues({'drive_connected': true, 'drive_email': 'a@b.no'});
+      await AppSettings.instance.load();
+      expect((AppSettings.instance.driveConnected, AppSettings.instance.driveEmail), (true, 'a@b.no'));
+    });
   });
 
   test('helpers', () {
@@ -144,4 +269,9 @@ void main() {
     expect(mimeTypeFor('x.webm', MediaKind.video), 'video/webm');
     expect(mimeTypeFor('blob:abc', MediaKind.picture), 'image/jpeg');
   });
+}
+
+class _FailingDisconnect extends FakeTokens {
+  _FailingDisconnect() : super('good');
+  @override Future<void> disconnect() async => throw StateError('no network');
 }

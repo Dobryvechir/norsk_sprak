@@ -9,7 +9,8 @@ import 'package:norsk_audio_groups/services/google_drive.dart';
 import 'package:norsk_audio_groups/services/settings.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'google_drive_test.dart' show FakeDrive;
+import 'package:norsk_audio_groups/services/drive_auth.dart';
+import 'google_drive_test.dart' show FakeDrive, FakeTokens;
 
 /// Documents kept in memory, like on web (no files).
 class MemoryDocumentStore extends DocumentStore {
@@ -31,10 +32,12 @@ Uint8List bytes(int n) => Uint8List.fromList(List.filled(n, 7));
 void main() {
   late FakeDrive fake;
   late GoogleDrive drive;
+  late FakeTokens tokens;
   setUp(() {
     fake = FakeDrive();
-    drive = GoogleDrive(dio: Dio()..httpClientAdapter = fake);
-    AppSettings.instance.googleDriveToken = 'good';
+    tokens = FakeTokens('good');
+    drive = GoogleDrive(dio: Dio()..httpClientAdapter = fake, auth: DriveAuth(tokens));
+    AppSettings.instance.driveConnected = true;
   });
 
   /// The Drive folder `document/<folder>`, created.
@@ -87,7 +90,7 @@ void main() {
   }
 
   test('a bad token stops the synchronization with a readable error', () async {
-    AppSettings.instance.googleDriveToken = 'expired';
+    tokens.silent = 'expired';
     expect(DocumentSync(drive, MemoryDocumentStore()).run(), throwsA(isA<DriveException>()));
   });
 

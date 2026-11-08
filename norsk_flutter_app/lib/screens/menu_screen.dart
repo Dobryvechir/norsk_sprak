@@ -3,6 +3,7 @@ import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
 import '../services/chat_api.dart';
+import '../services/drive_auth.dart';
 import '../services/settings.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
@@ -40,7 +41,7 @@ class _MenuScreenState extends State<MenuScreen> {
     loadGroups(); // roles may have changed meanwhile
   }
   @override void dispose() { locationResponder.stop(); super.dispose(); }
-  Future<void> logout() async { locationResponder.stop(); await widget.api.logout(); widget.onLogout(); }
+  Future<void> logout() async { locationResponder.stop(); DriveAuth.instance.signOut(); await widget.api.logout(); widget.onLogout(); }
   Widget entry(IconData icon, String label, VoidCallback onTap) => Card(child: ListTile(
     leading: Icon(icon), title: Text(label), trailing: const Icon(Icons.chevron_right), onTap: onTap));
   @override Widget build(BuildContext context) => Scaffold(
@@ -53,10 +54,10 @@ class _MenuScreenState extends State<MenuScreen> {
         trailing: IconButton(tooltip: context.tr('refresh'), onPressed: loadGroups, icon: const Icon(Icons.refresh)))),
       entry(Icons.headphones, context.tr('menuRecords'), () => open(GroupsScreen(api: widget.api))),
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
-      // Documents are kept on this device; only their synchronization needs the Google Drive token.
+      // Documents are kept on this device; only their synchronization needs Google Drive.
       entry(Icons.folder_copy, context.tr('menuDocuments'), () => open(const DocumentsScreen())),
-      // Media works with the user's own Google Drive, so it is shown only once their token is set in Settings.
-      if (AppSettings.instance.googleDriveToken.isNotEmpty) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
+      // Media works with the user's own Google Drive, so it is shown only once that is connected in Settings.
+      if (AppSettings.instance.driveConnected) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
       entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(ChatScreen(api: widget.api))),
       entry(Icons.settings, context.tr('menuSettings'), () => open(SettingsScreen(api: widget.api))),

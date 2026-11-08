@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../l10n/l10n.dart';
+import 'drive_auth.dart';
 import 'media_store.dart';
-import 'settings.dart';
+
+export 'drive_auth.dart' show DriveException;
 
 /// A file on Google Drive.
 class DriveFile {
@@ -23,41 +25,43 @@ class DrivePage {
   const DrivePage(this.files, this.nextPageToken);
 }
 
-/// An error from Google Drive, with a message for the user.
-class DriveException implements Exception {
-  final String message;
-  const DriveException(this.message);
-  @override String toString() => message;
-}
-
-/// The user's Google Drive, used straight from the app (never through our backend) with the personal
-/// token from Settings. Media lives in `/media`: see [MediaKind] for the folders.
+/// The user's Google Drive, used straight from the app (never through our backend) once it is connected
+/// in Settings (see [DriveAuth]). Media lives in `/media`: see [MediaKind] for the folders.
 class GoogleDrive {
   static const _api = 'https://www.googleapis.com/drive/v3/files';
   static const _upload = 'https://www.googleapis.com/upload/drive/v3/files';
   static const folderType = 'application/vnd.google-apps.folder';
 
-  GoogleDrive({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(minutes: 10)));
+  GoogleDrive({Dio? dio, DriveAuth? auth})
+    : _dio = dio ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(minutes: 10))),
+      _driveAuth = auth ?? DriveAuth.instance;
   final Dio _dio;
+  final DriveAuth _driveAuth;
+  /// The token from the latest [_run], for the requests of its call.
+  String _token = '';
   /// Folder ids found or created so far, by path ("media", "media/pictures", …).
   final _folders = <String, String>{};
 
-  Options _auth([Options? o]) {
-    final token = AppSettings.instance.googleDriveToken;
-    if (token.isEmpty) throw DriveException(trNow('driveTokenMissing'));
-    return (o ?? Options()).copyWith(headers: {...?o?.headers, 'Authorization': 'Bearer $token'});
-  }
+  Options _auth([Options? o]) => (o ?? Options()).copyWith(headers: {...?o?.headers, 'Authorization': 'Bearer $_token'});
 
-  /// Runs [call], turning failures into a [DriveException]; a failure also forgets the folder ids,
-  /// in case a folder was removed meanwhile.
+  /// Runs [call] with a current token, and once more with a new one when Drive refuses it (so [call]
+  /// must be safe to repeat from the start). Failures become a [DriveException]; a failure also forgets
+  /// the folder ids, in case a folder was removed meanwhile.
   Future<T> _run<T>(Future<T> Function() call) async {
-    try { return await call(); }
-    on DioException catch (e) { _folders.clear(); throw DriveException(_message(e)); }
+    _token = await _driveAuth.token();
+    try {
+      try { return await call(); }
+      on DioException catch (e) {
+        if (e.response?.statusCode != 401) rethrow;
+        _token = await _driveAuth.token(rejected: _token);
+        return await call();
+      }
+    } on DioException catch (e) { _folders.clear(); throw DriveException(_message(e)); }
   }
 
   static String _message(DioException e) {
     final status = e.response?.statusCode;
-    if (status == 401) return trNow('driveTokenInvalid');
+    if (status == 401) return trNow('driveReconnect');
     var data = e.response?.data;
     if (data is List<int>) { try { data = jsonDecode(utf8.decode(data)); } catch (_) {} }
     if (data is String) { try { data = jsonDecode(data); } catch (_) {} }
@@ -136,28 +140,30 @@ class GoogleDrive {
   /// Uploads the file at [path] (not on web) as [name] into [folderId]; returns the new file's id.
   Future<String> uploadFile(String folderId, String name, String mimeType, String path, {ProgressCallback? onProgress}) async {
     final file = File(path);
-    return _uploadData(folderId, name, mimeType, file.openRead(), await file.length(), onProgress);
+    return _uploadData(folderId, name, mimeType, file.openRead, await file.length(), onProgress);
   }
 
   /// Uploads [media] as [name] into [folderId]; returns the new file's id.
   Future<String> uploadMedia(String folderId, String name, LocalMedia media, {ProgressCallback? onProgress}) async {
     final length = await media.length();
-    final Object data = media.path != null && !kIsWeb ? File(media.path!).openRead() : await media.readBytes();
-    return _uploadData(folderId, name, media.mimeType, data, length, onProgress);
+    if (media.path != null && !kIsWeb) return _uploadData(folderId, name, media.mimeType, File(media.path!).openRead, length, onProgress);
+    final bytes = await media.readBytes();
+    return _uploadData(folderId, name, media.mimeType, () => bytes, length, onProgress);
   }
 
   /// Uploads [bytes] as [name] into [folderId]; returns the new file's id.
   Future<String> uploadBytes(String folderId, String name, String mimeType, Uint8List bytes, {ProgressCallback? onProgress}) =>
-    _uploadData(folderId, name, mimeType, bytes, bytes.length, onProgress);
+    _uploadData(folderId, name, mimeType, () => bytes, bytes.length, onProgress);
 
-  /// A resumable upload: one request with the file's details, then the content itself.
-  Future<String> _uploadData(String folderId, String name, String mimeType, Object data, int length, ProgressCallback? onProgress) => _run(() async {
+  /// A resumable upload: one request with the file's details, then the content itself. [data] gives
+  /// the content anew for each try, as a file's stream can be read only once.
+  Future<String> _uploadData(String folderId, String name, String mimeType, Object Function() data, int length, ProgressCallback? onProgress) => _run(() async {
     final start = await _dio.post(_upload, queryParameters: {'uploadType': 'resumable', 'fields': 'id'},
       data: {'name': name, 'parents': [folderId], 'mimeType': mimeType},
       options: _auth(Options(headers: {'X-Upload-Content-Type': mimeType, 'X-Upload-Content-Length': '$length'})));
     final location = start.headers.value('location');
     if (location == null) throw DriveException(trNow('driveError', {'error': 'no upload location'}));
-    final r = await _dio.put(location, data: data, onSendProgress: onProgress,
+    final r = await _dio.put(location, data: data(), onSendProgress: onProgress,
       options: _auth(Options(headers: {Headers.contentTypeHeader: mimeType, Headers.contentLengthHeader: length})));
     return '${(r.data is String ? jsonDecode(r.data as String) : r.data as Map)['id']}';
   });

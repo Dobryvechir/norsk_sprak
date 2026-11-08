@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../services/api.dart';
 import '../services/dictionaries.dart';
+import '../services/drive_auth.dart';
 import '../services/settings.dart';
 import 'dictionaries_screen.dart';
-/// Language preferences and the personal Google Drive token, stored locally on this device.
+/// Language preferences and the connection to the user's Google Drive, kept locally on this device.
 class SettingsScreen extends StatelessWidget {
   final Api api;
   const SettingsScreen({super.key, required this.api});
@@ -30,7 +31,7 @@ class SettingsScreen extends StatelessWidget {
             selected: settings.textLanguages.contains(e.key), onSelected: (on) => settings.setTextLanguage(e.key, on)),
         ]),
         const SizedBox(height: 24),
-        const _DriveTokenField(),
+        const _DriveConnection(),
         const SizedBox(height: 24),
         OutlinedButton.icon(icon: const Icon(Icons.menu_book), label: Text(context.tr('manageDictionaries')),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DictionariesScreen(dictionaries: Dictionaries(api))))),
@@ -38,19 +39,46 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-/// The personal Google Drive token for Media: saved as typed, only on this device (never on our backend).
-class _DriveTokenField extends StatefulWidget {
-  const _DriveTokenField();
-  @override State<_DriveTokenField> createState() => _DriveTokenFieldState();
+/// Connects the user's own Google Drive, for Media, document synchronization and Chat attachments.
+class _DriveConnection extends StatefulWidget {
+  const _DriveConnection();
+  @override State<_DriveConnection> createState() => _DriveConnectionState();
 }
-class _DriveTokenFieldState extends State<_DriveTokenField> {
-  late final controller = TextEditingController(text: AppSettings.instance.googleDriveToken);
-  bool hidden = true;
-  @override void dispose() { controller.dispose(); super.dispose(); }
-  @override Widget build(BuildContext context) => TextField(controller: controller, obscureText: hidden,
-    autocorrect: false, enableSuggestions: false, onChanged: AppSettings.instance.setGoogleDriveToken,
-    decoration: InputDecoration(labelText: context.tr('googleDriveToken'), helperText: context.tr('googleDriveTokenHint'), helperMaxLines: 3,
-      border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.add_to_drive),
-      suffixIcon: IconButton(tooltip: context.tr(hidden ? 'show' : 'hide'), onPressed: () => setState(() => hidden = !hidden),
-        icon: Icon(hidden ? Icons.visibility : Icons.visibility_off))));
+class _DriveConnectionState extends State<_DriveConnection> {
+  bool busy = false;
+  String? error;
+
+  Future<void> run(Future<void> Function() action) async {
+    setState(() { busy = true; error = null; });
+    try { await action(); }
+    on DriveException catch (e) { if (mounted) setState(() => error = e.message); }
+    finally { if (mounted) setState(() => busy = false); }
+  }
+
+  @override Widget build(BuildContext context) {
+    final auth = DriveAuth.instance, theme = Theme.of(context);
+    return ListenableBuilder(listenable: AppSettings.instance, builder: (context, _) {
+      final settings = AppSettings.instance, email = settings.driveEmail;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (!settings.driveConnected)
+          OutlinedButton.icon(icon: const Icon(Icons.add_to_drive), label: Text(context.tr('driveConnect')),
+            onPressed: busy || !auth.configured ? null : () => run(auth.connect))
+        else ...[
+          Row(children: [
+            const Icon(Icons.add_to_drive),
+            const SizedBox(width: 12),
+            Expanded(child: Text(email == null ? context.tr('driveConnected') : context.tr('driveConnectedAs', {'email': email}))),
+          ]),
+          const SizedBox(height: 8),
+          Wrap(alignment: WrapAlignment.end, spacing: 8, children: [
+            TextButton(onPressed: busy ? null : () => run(auth.connect), child: Text(context.tr('driveReconnectAction'))),
+            TextButton(onPressed: busy ? null : () => run(auth.disconnect), child: Text(context.tr('driveDisconnect'))),
+          ]),
+        ],
+        const SizedBox(height: 4),
+        Text(context.tr(auth.configured ? 'driveConnectHint' : 'driveNotConfigured'), style: theme.textTheme.bodySmall),
+        if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
+      ]);
+    });
+  }
 }

@@ -1,0 +1,3 @@
+// The iOS OAuth client ID reversed, e.g. com.googleusercontent.apps.123-abc (see "Google Drive sign-in"
+// in README.md). Used as the URL scheme in Info.plist that brings Google's sign-in back to the app.
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.not-configured

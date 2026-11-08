@@ -21,7 +21,7 @@ import 'media_view_screen.dart' show extensionFor;
 /// One chat: its messages (checked for new ones every few seconds) and a field to write. Pictures,
 /// audio, video and files are uploaded to the sender's own Google Drive (folder `chat`, or taken from
 /// Media), shared "anyone with the link", and only the link is sent to our server. That needs the
-/// Google Drive token from Settings.
+/// Google Drive connected in Settings.
 class ChatConversationScreen extends StatefulWidget {
   final ChatApi chat; final ChatConversation conversation; final ChatPerson me;
   const ChatConversationScreen({super.key, required this.chat, required this.conversation, required this.me});
@@ -41,7 +41,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   ChatConversation get conv => widget.conversation;
   ChatApi get chat => widget.chat;
-  bool get canAttach => AppSettings.instance.googleDriveToken.isNotEmpty;
+  bool get canAttach => AppSettings.instance.driveConnected;
 
   @override void initState() {
     super.initState();

@@ -11,6 +11,7 @@ import 'translations/fr.dart';
 import 'translations/he.dart';
 import 'translations/it.dart';
 import 'translations/nb.dart';
+import 'translations/nn.dart';
 import 'translations/pl.dart';
 import 'translations/pt.dart';
 import 'translations/ru.dart';
@@ -21,14 +22,14 @@ const defaultLanguage = 'en';
 
 /// Supported language codes, each with the language's own name.
 const languageNames = {
-  'en': 'English', 'nb': 'Norsk', 'uk': 'Українська', 'ru': 'Русский',
+  'en': 'English', 'nb': 'Norsk', 'nn': 'Nynorsk', 'uk': 'Українська', 'ru': 'Русский',
   'de': 'Deutsch', 'da': 'Dansk', 'sv': 'Svenska', 'cs': 'Čeština',
   'bg': 'Български', 'pl': 'Polski', 'pt': 'Português', 'es': 'Español',
   'fr': 'Français', 'el': 'Ελληνικά', 'he': 'עברית', 'it': 'Italiano',
 };
 
 const translations = <String, Map<String, String>>{
-  'en': stringsEn, 'nb': stringsNb, 'uk': stringsUk, 'ru': stringsRu,
+  'en': stringsEn, 'nb': stringsNb, 'nn': stringsNn, 'uk': stringsUk, 'ru': stringsRu,
   'de': stringsDe, 'da': stringsDa, 'sv': stringsSv, 'cs': stringsCs,
   'bg': stringsBg, 'pl': stringsPl, 'pt': stringsPt, 'es': stringsEs,
   'fr': stringsFr, 'el': stringsEl, 'he': stringsHe, 'it': stringsIt,
@@ -40,8 +41,9 @@ List<String> orderedLanguages(Iterable<String> codes) {
   return [for (final code in languageNames.keys) if (set.contains(code)) code];
 }
 
-/// Flutter locale for a language code (our codes are the standard ISO 639-1 ones).
-Locale localeFor(String code) => Locale(code);
+/// Flutter locale for a language code (our codes are the standard ISO 639-1 ones). It only decides the
+/// texts of Flutter's own widgets and the text direction. Flutter has no texts for Nynorsk: those use Bokmål.
+Locale localeFor(String code) => Locale(code == 'nn' ? 'nb' : code);
 
 /// Translates [key] into [language] (falling back to English), filling `{name}` placeholders from [args].
 String translate(String language, String key, [Map<String, Object?> args = const {}]) {

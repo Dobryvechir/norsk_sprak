@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:norsk_audio_groups/l10n/l10n.dart';
 import 'package:norsk_audio_groups/models/entities.dart';
 import 'package:norsk_audio_groups/screens/chapters_screen.dart';
 import 'package:norsk_audio_groups/screens/word_translation.dart';
@@ -138,8 +139,8 @@ void main() {
     test('the study language gets none; there is a color for every language', () {
       AppSettings.instance.textLanguages = const ['en', 'nb', 'uk'];
       expect(wordTranslationLanguages('nb'), {'en': wordTranslationColors[0], 'uk': wordTranslationColors[1]});
-      AppSettings.instance.textLanguages = translationsLanguagesForTest;
-      expect(wordTranslationLanguages('xx').values.toSet().length, translationsLanguagesForTest.length);
+      AppSettings.instance.textLanguages = languageNames.keys.toList();
+      expect(wordTranslationLanguages('xx').values.toSet().length, languageNames.length);
     });
   });
 
@@ -381,5 +382,3 @@ void main() {
     });
   });
 }
-
-const translationsLanguagesForTest = ['en', 'nb', 'uk', 'ru', 'de', 'da', 'sv', 'cs', 'bg', 'pl', 'pt', 'es', 'fr', 'el', 'he', 'it'];

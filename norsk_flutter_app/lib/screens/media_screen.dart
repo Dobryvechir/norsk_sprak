@@ -7,7 +7,7 @@ import 'camera_capture_screen.dart';
 import 'media_list_screen.dart';
 
 /// Media: pictures, videos and audio recorded here and kept on the user's own Google Drive (with the
-/// token from Settings; never through our backend). Every temporary local file is removed on leaving.
+/// connection from Settings; never through our backend). Every temporary local file is removed on leaving.
 class MediaScreen extends StatefulWidget {
   const MediaScreen({super.key});
   @override State<MediaScreen> createState() => _MediaScreenState();

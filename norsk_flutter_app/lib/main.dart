@@ -22,7 +22,7 @@ class _NorskAppState extends State<NorskApp> {
     theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xff315f72)),
     // Built-in widget texts (tooltips, dialogs) and text direction (Hebrew is right-to-left) follow the UI language.
     locale: localeFor(settings.uiLanguage),
-    supportedLocales: [for (final code in languageNames.keys) localeFor(code)],
+    supportedLocales: {for (final code in languageNames.keys) localeFor(code)}.toList(),
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     home: loading ? const Scaffold(body: Center(child: CircularProgressIndicator())) :
       api.user == null ? LoginScreen(api: api, onLogin: () => setState(() {})) :

@@ -97,6 +97,26 @@ pubspec.yaml
 analysis_options.yaml
 ```
 
+## Google Drive sign-in
+
+Media, document synchronization and Chat attachments use the user's own Google Drive, connected in Settings with Google Sign-In (Android, iOS and web). The app calls Drive directly; nothing goes through the backend. Until the client IDs below are set, Settings says sign-in isn't set up and Drive can't be connected.
+
+In a [Google Cloud](https://console.cloud.google.com/) project:
+
+1. Enable the **Google Drive API**.
+2. Configure the OAuth consent screen and add the scope `https://www.googleapis.com/auth/drive`. While its status is "Testing", add each Google account as a test user. Google's restricted-scope verification is needed before publishing.
+3. Under Credentials, create these OAuth clients:
+
+| Type | Settings | Where it goes |
+|---|---|---|
+| Web application | Authorized JavaScript origins: `http://localhost`, `http://localhost:7357` (used by `kjører_web.bat`) and the origin the app is hosted on | `googleWebClientId` in `lib/services/google_client_ids.dart` (Android uses it too) |
+| Android | Package `com.example.norsk_audio_groups`, plus the SHA-1 of each signing key, debug and release (`keytool -list -v -keystore <keystore>`) | Nothing: Google recognizes the app by these |
+| iOS | Bundle ID `com.example.norskAudioGroups` | `googleIosClientId` in `lib/services/google_client_ids.dart`, and its reversed form as `GOOGLE_REVERSED_CLIENT_ID` in `ios/Flutter/GoogleSignIn.xcconfig` |
+
+The reversed form of `123-abc.apps.googleusercontent.com` is `com.googleusercontent.apps.123-abc`. These client IDs are not secrets. If the package name or bundle ID changes, change the client too.
+
+Renewal differs by platform. Android and iOS renew the access token silently. On web, Google offers no silent renewal: the token lasts an hour and is lost on reload, and then the next Drive action opens a popup, which closes by itself if access was already granted. If the browser blocks it, the user is asked to reconnect in Settings.
+
 ## Security considerations
 
 - Use HTTPS for remote connections.

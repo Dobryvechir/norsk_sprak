@@ -11,6 +11,7 @@ const wordTranslationColors = <Color>[
   Color(0xFFB45309), Color(0xFF00796B), Color(0xFFC2185B), Color(0xFF6D4C41),
   Color(0xFF303F9F), Color(0xFF6B7000), Color(0xFF00728F), Color(0xFF9C27B0),
   Color(0xFF616161), Color(0xFF880E4F), Color(0xFF0D3C78), Color(0xFF33691E),
+  Color(0xFF5E35B1),
 ];
 
 /// The chosen text languages to translate words of a [main]-language sentence into, each with its color.

@@ -30,7 +30,7 @@ class DocumentSync {
   final DocumentStore store;
 
   /// Runs the synchronization. [onProgress] gets the number of transfers done, their total and the
-  /// file being transferred. A failure to reach Drive at all (e.g. a bad token) throws [DriveException];
+  /// file being transferred. A failure to reach Drive at all (e.g. no valid sign-in) throws [DriveException];
   /// a failing file is noted in [SyncReport.errors] and the rest go on.
   Future<SyncReport> run({void Function(int done, int total, String name)? onProgress}) async {
     final report = SyncReport();

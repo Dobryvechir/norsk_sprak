@@ -11,11 +11,10 @@ class AppSettings extends ChangeNotifier {
   String uiLanguage = defaultLanguage;
   String audioLanguage = 'nb';
   List<String> textLanguages = const ['nb'];
-  /// The user's own Google Drive access token, for Media. Kept only on this device (secure storage),
-  /// never sent to our backend; Media is shown only when it is set.
-  String googleDriveToken = '';
-  static const _secure = FlutterSecureStorage();
-  static const _driveTokenKey = 'google_drive_token';
+  /// Whether the user has connected their own Google Drive (see DriveAuth); Media is shown only then.
+  bool driveConnected = false;
+  /// The address of the connected Google account, when the platform tells it.
+  String? driveEmail;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -23,7 +22,10 @@ class AppSettings extends ChangeNotifier {
     audioLanguage = _valid(prefs.getString('audio_language')) ?? 'nb';
     final texts = (prefs.getStringList('text_languages') ?? const []).map(_valid).whereType<String>().toSet().toList();
     textLanguages = texts.isEmpty ? const ['nb'] : texts;
-    try { googleDriveToken = await _secure.read(key: _driveTokenKey) ?? ''; } catch (_) { googleDriveToken = ''; }
+    driveConnected = prefs.getBool('drive_connected') ?? false;
+    driveEmail = prefs.getString('drive_email');
+    // Removes the token that used to be pasted into Settings, which is no longer used.
+    try { await const FlutterSecureStorage().delete(key: 'google_drive_token'); } catch (_) {}
     notifyListeners();
   }
 
@@ -52,10 +54,10 @@ class AppSettings extends ChangeNotifier {
     await (await SharedPreferences.getInstance()).setStringList('text_languages', textLanguages);
   }
 
-  Future<void> setGoogleDriveToken(String token) async {
-    token = token.trim();
-    if (token == googleDriveToken) return;
-    googleDriveToken = token; notifyListeners();
-    token.isEmpty ? await _secure.delete(key: _driveTokenKey) : await _secure.write(key: _driveTokenKey, value: token);
+  Future<void> setDriveConnection(bool connected, {String? email}) async {
+    driveConnected = connected; driveEmail = connected ? email : null; notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('drive_connected', connected);
+    driveEmail == null ? await prefs.remove('drive_email') : await prefs.setString('drive_email', driveEmail!);
   }
 }

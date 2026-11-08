@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:norsk_audio_groups/models/chat.dart';
 import 'package:norsk_audio_groups/services/google_drive.dart';
+import 'package:norsk_audio_groups/services/drive_auth.dart';
 import 'package:norsk_audio_groups/services/settings.dart';
+import 'google_drive_test.dart' show FakeTokens;
 
 /// Answers the two calls of [GoogleDrive.shareWithAnyone] and records them.
 class _ShareAdapter implements HttpClientAdapter {
@@ -49,9 +51,9 @@ void main() {
   });
 
   test('sharing a Drive file makes it readable by anyone with the link', () async {
-    AppSettings.instance.googleDriveToken = 'good';
+    AppSettings.instance.driveConnected = true;
     final adapter = _ShareAdapter();
-    final link = await GoogleDrive(dio: Dio()..httpClientAdapter = adapter).shareWithAnyone('f1');
+    final link = await GoogleDrive(dio: Dio()..httpClientAdapter = adapter, auth: DriveAuth(FakeTokens('good'))).shareWithAnyone('f1');
     expect(link, 'https://drive.google.com/file/d/f1/view');
     expect(adapter.calls.first, 'POST /drive/v3/files/f1/permissions {"role":"reader","type":"anyone"}');
   });
