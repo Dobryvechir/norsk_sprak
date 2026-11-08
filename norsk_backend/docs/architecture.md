@@ -47,6 +47,7 @@ through the `status` field of each language's audio in the metadata store.
 | `routes/admin.py` | `/api/admin/...` create users and groups (system admin) |
 | `routes/groups.py` | `/api/groups/{gid}/...` members, AI config, usage (group admin) |
 | `routes/recordings.py` | Upload, list, play, edit, delete, transcribe recordings |
+| `routes/dictionaries.py` | `/api/dictionaries`, `/api/dictionary/{language_code}` files from `data/dictionaries` |
 
 Dependency direction (arrows mean "imports"). Lower layers never import higher ones:
 

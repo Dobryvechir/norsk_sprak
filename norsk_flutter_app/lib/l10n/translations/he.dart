@@ -264,4 +264,10 @@ const stringsHe = <String, String>{
   'chatExpirationDays': 'שמירת הודעות (ימים)',
   'chatSettingsInvalid': 'הזינו מספרים שלמים: תת־קבוצות 0–10000, KB 1–100000, ימים 1–3650.',
   'chatSettingsSaved': 'הגדרות הצ\'אט נשמרו.',
+  'manageDictionaries': 'ניהול מילונים',
+  'dictionaries': 'מילונים',
+  'update': 'עדכון',
+  'updateAll': 'עדכון הכול',
+  'remove': 'הסרה',
+  'noDictionaries': 'אין מילונים זמינים.',
 };

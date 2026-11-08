@@ -264,4 +264,10 @@ const stringsDa = <String, String>{
   'chatExpirationDays': 'Beskeder gemmes (dage)',
   'chatSettingsInvalid': 'Indtast hele tal: undergrupper 0–10000, kB 1–100000, dage 1–3650.',
   'chatSettingsSaved': 'Chatindstillingerne er gemt.',
+  'manageDictionaries': 'Administrer ordbøger',
+  'dictionaries': 'Ordbøger',
+  'update': 'Opdater',
+  'updateAll': 'Opdater alle',
+  'remove': 'Fjern',
+  'noDictionaries': 'Ingen tilgængelige ordbøger.',
 };

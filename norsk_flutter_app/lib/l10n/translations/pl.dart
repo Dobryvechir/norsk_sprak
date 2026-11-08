@@ -264,4 +264,10 @@ const stringsPl = <String, String>{
   'chatExpirationDays': 'Przechowywanie wiadomości (dni)',
   'chatSettingsInvalid': 'Wpisz liczby całkowite: podgrupy 0–10000, kB 1–100000, dni 1–3650.',
   'chatSettingsSaved': 'Zapisano ustawienia czatu.',
+  'manageDictionaries': 'Zarządzaj słownikami',
+  'dictionaries': 'Słowniki',
+  'update': 'Aktualizuj',
+  'updateAll': 'Aktualizuj wszystkie',
+  'remove': 'Usuń',
+  'noDictionaries': 'Brak dostępnych słowników.',
 };

@@ -264,4 +264,10 @@ const stringsUk = <String, String>{
   'chatExpirationDays': 'Зберігати повідомлення (днів)',
   'chatSettingsInvalid': 'Введіть цілі числа: підгрупи 0–10000, кБ 1–100000, дні 1–3650.',
   'chatSettingsSaved': 'Налаштування чату збережено.',
+  'manageDictionaries': 'Керувати словниками',
+  'dictionaries': 'Словники',
+  'update': 'Оновити',
+  'updateAll': 'Оновити всі',
+  'remove': 'Видалити',
+  'noDictionaries': 'Немає доступних словників.',
 };

@@ -59,7 +59,7 @@ class _MenuScreenState extends State<MenuScreen> {
       if (AppSettings.instance.googleDriveToken.isNotEmpty) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
       entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(ChatScreen(api: widget.api))),
-      entry(Icons.settings, context.tr('menuSettings'), () => open(const SettingsScreen())),
+      entry(Icons.settings, context.tr('menuSettings'), () => open(SettingsScreen(api: widget.api))),
       if (widget.api.hasAdminRights(groups)) entry(Icons.admin_panel_settings, context.tr('menuAdmin'), () => open(AdminMenuScreen(api: widget.api))),
       entry(Icons.logout, context.tr('menuLogout'), logout),
     ]))),

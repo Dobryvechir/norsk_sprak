@@ -264,4 +264,10 @@ const stringsEl = <String, String>{
   'chatExpirationDays': 'Διατήρηση μηνυμάτων (ημέρες)',
   'chatSettingsInvalid': 'Εισαγάγετε ακέραιους: υποομάδες 0–10000, kB 1–100000, ημέρες 1–3650.',
   'chatSettingsSaved': 'Οι ρυθμίσεις συνομιλίας αποθηκεύτηκαν.',
+  'manageDictionaries': 'Διαχείριση λεξικών',
+  'dictionaries': 'Λεξικά',
+  'update': 'Ενημέρωση',
+  'updateAll': 'Ενημέρωση όλων',
+  'remove': 'Αφαίρεση',
+  'noDictionaries': 'Δεν υπάρχουν διαθέσιμα λεξικά.',
 };

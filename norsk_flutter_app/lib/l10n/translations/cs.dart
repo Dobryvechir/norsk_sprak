@@ -264,4 +264,10 @@ const stringsCs = <String, String>{
   'chatExpirationDays': 'Uchovávat zprávy (dní)',
   'chatSettingsInvalid': 'Zadejte celá čísla: podskupiny 0–10000, kB 1–100000, dny 1–3650.',
   'chatSettingsSaved': 'Nastavení chatu uloženo.',
+  'manageDictionaries': 'Spravovat slovníky',
+  'dictionaries': 'Slovníky',
+  'update': 'Aktualizovat',
+  'updateAll': 'Aktualizovat vše',
+  'remove': 'Odebrat',
+  'noDictionaries': 'Žádné slovníky nejsou k dispozici.',
 };

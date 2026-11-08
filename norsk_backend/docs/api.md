@@ -141,3 +141,13 @@ the top of the file); if every attempt fails, the answer is `502`.
 
 Another book with its own index (`<book>_audio.json`) needs one line in `main.py`:
 `app.include_router(bible.book_audio_router("norsk"))`.
+
+## Dictionaries (`routes/dictionaries.py`)
+
+One file per language, `data/dictionaries/dict_<language_code>.json`. No login needed,
+and readable from any origin (`Access-Control-Allow-Origin: *`), independently of `ALLOWED_ORIGINS`.
+
+| Method | Path | Who | Response |
+|---|---|---|---|
+| GET | `/api/dictionaries` | nobody | → `[{lang, url: "/api/dictionary/<lang>", size}]`, sorted by `lang`; `size` is the file size in bytes |
+| GET | `/api/dictionary/{language_code}` | nobody | → the content of that file, as JSON. `404 Dictionary not found` |

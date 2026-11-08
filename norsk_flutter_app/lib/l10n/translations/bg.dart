@@ -264,4 +264,10 @@ const stringsBg = <String, String>{
   'chatExpirationDays': 'Пазене на съобщенията (дни)',
   'chatSettingsInvalid': 'Въведете цели числа: подгрупи 0–10000, kB 1–100000, дни 1–3650.',
   'chatSettingsSaved': 'Настройките на чата са запазени.',
+  'manageDictionaries': 'Управление на речниците',
+  'dictionaries': 'Речници',
+  'update': 'Обнови',
+  'updateAll': 'Обнови всички',
+  'remove': 'Премахни',
+  'noDictionaries': 'Няма налични речници.',
 };

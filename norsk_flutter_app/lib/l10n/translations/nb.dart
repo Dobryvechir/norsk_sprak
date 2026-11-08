@@ -264,4 +264,10 @@ const stringsNb = <String, String>{
   'chatExpirationDays': 'Meldinger beholdes (dager)',
   'chatSettingsInvalid': 'Skriv inn hele tall: undergrupper 0–10000, kB 1–100000, dager 1–3650.',
   'chatSettingsSaved': 'Chatinnstillingene er lagret.',
+  'manageDictionaries': 'Administrer ordbøker',
+  'dictionaries': 'Ordbøker',
+  'update': 'Oppdater',
+  'updateAll': 'Oppdater alle',
+  'remove': 'Fjern',
+  'noDictionaries': 'Ingen ordbøker tilgjengelig.',
 };

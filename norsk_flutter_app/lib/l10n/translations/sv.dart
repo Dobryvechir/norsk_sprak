@@ -264,4 +264,10 @@ const stringsSv = <String, String>{
   'chatExpirationDays': 'Meddelanden sparas (dagar)',
   'chatSettingsInvalid': 'Ange heltal: undergrupper 0–10000, kB 1–100000, dagar 1–3650.',
   'chatSettingsSaved': 'Chattinställningarna har sparats.',
+  'manageDictionaries': 'Hantera ordböcker',
+  'dictionaries': 'Ordböcker',
+  'update': 'Uppdatera',
+  'updateAll': 'Uppdatera alla',
+  'remove': 'Ta bort',
+  'noDictionaries': 'Inga ordböcker tillgängliga.',
 };

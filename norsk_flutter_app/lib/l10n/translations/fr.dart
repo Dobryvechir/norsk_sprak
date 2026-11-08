@@ -264,4 +264,10 @@ const stringsFr = <String, String>{
   'chatExpirationDays': 'Conservation des messages (jours)',
   'chatSettingsInvalid': 'Saisissez des nombres entiers : sous-groupes 0–10000, ko 1–100000, jours 1–3650.',
   'chatSettingsSaved': 'Paramètres du chat enregistrés.',
+  'manageDictionaries': 'Gérer les dictionnaires',
+  'dictionaries': 'Dictionnaires',
+  'update': 'Mettre à jour',
+  'updateAll': 'Tout mettre à jour',
+  'remove': 'Supprimer',
+  'noDictionaries': 'Aucun dictionnaire disponible.',
 };

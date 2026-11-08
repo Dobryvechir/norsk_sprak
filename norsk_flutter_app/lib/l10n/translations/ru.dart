@@ -264,4 +264,10 @@ const stringsRu = <String, String>{
   'chatExpirationDays': 'Хранить сообщения (дней)',
   'chatSettingsInvalid': 'Введите целые числа: подгруппы 0–10000, кБ 1–100000, дни 1–3650.',
   'chatSettingsSaved': 'Настройки чата сохранены.',
+  'manageDictionaries': 'Управление словарями',
+  'dictionaries': 'Словари',
+  'update': 'Обновить',
+  'updateAll': 'Обновить все',
+  'remove': 'Удалить',
+  'noDictionaries': 'Нет доступных словарей.',
 };

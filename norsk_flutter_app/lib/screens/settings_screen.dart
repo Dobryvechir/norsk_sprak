@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
+import '../services/api.dart';
+import '../services/dictionaries.dart';
 import '../services/settings.dart';
+import 'dictionaries_screen.dart';
 /// Language preferences and the personal Google Drive token, stored locally on this device.
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+  final Api api;
+  const SettingsScreen({super.key, required this.api});
   @override Widget build(BuildContext context) {
     final settings = AppSettings.instance;
     Widget languagePicker(String label, String value, ValueChanged<String> onChanged) => InputDecorator(
@@ -27,6 +31,9 @@ class SettingsScreen extends StatelessWidget {
         ]),
         const SizedBox(height: 24),
         const _DriveTokenField(),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(icon: const Icon(Icons.menu_book), label: Text(context.tr('manageDictionaries')),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DictionariesScreen(dictionaries: Dictionaries(api))))),
       ]))));
   }
 }

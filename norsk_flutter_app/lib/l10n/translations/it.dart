@@ -264,4 +264,10 @@ const stringsIt = <String, String>{
   'chatExpirationDays': 'Conservazione messaggi (giorni)',
   'chatSettingsInvalid': 'Inserisci numeri interi: sottogruppi 0–10000, kB 1–100000, giorni 1–3650.',
   'chatSettingsSaved': 'Impostazioni chat salvate.',
+  'manageDictionaries': 'Gestisci dizionari',
+  'dictionaries': 'Dizionari',
+  'update': 'Aggiorna',
+  'updateAll': 'Aggiorna tutti',
+  'remove': 'Rimuovi',
+  'noDictionaries': 'Nessun dizionario disponibile.',
 };
