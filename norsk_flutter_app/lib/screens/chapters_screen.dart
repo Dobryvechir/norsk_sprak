@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
+import '../services/dictionaries.dart';
 import '../services/offline_chapters.dart';
 import '../services/settings.dart';
+import '../services/word_dictionary.dart';
 import 'books_screen.dart';
 import 'chapter_player_screen.dart';
+import 'word_translation.dart';
 /// The chapters of [section], paged. A chapter not saved on this device has a Download button;
 /// a saved one has View (read it line by line) and Play, which use the saved copy.
 class ChaptersScreen extends StatefulWidget {
@@ -118,8 +121,9 @@ class _ChapterViewScreenState extends State<ChapterViewScreen> {
   }
 }
 /// Line [index] of a chapter as View and the chapter player show it: "Line x of y", the line in the study
-/// language and, below it, its translations in the other chosen text languages.
-class ChapterLine extends StatelessWidget {
+/// language and, below it, its translations in the other chosen text languages. If that language's dictionary
+/// is saved on this device, a button also toggles the word translation (off at first; it stays as set from line to line).
+class ChapterLine extends StatefulWidget {
   final Recording chapter; final int index, total;
   /// Shown as the study language when the chapter has text in it (the player passes its audio's language).
   final String? language;
@@ -136,20 +140,65 @@ class ChapterLine extends StatelessWidget {
   /// The chosen text languages, other than [main], that have text.
   static List<String> translationLanguages(Recording r, String main) =>
     orderedLanguages(AppSettings.instance.textLanguages).where((l) => l != main && hasText(r, l)).toList();
+  @override State<ChapterLine> createState() => _ChapterLineState();
+}
+class _ChapterLineState extends State<ChapterLine> {
+  /// The language last checked for a saved dictionary, and whether it has one.
+  String? checked;
+  bool hasDictionary = false, wordsOn = false;
+  WordDictionary? dictionary;
+  Object? dictionaryError;
+  /// Called on every build; does something only when the main language has changed.
+  void checkDictionary(String? main) {
+    if (main == checked) return;
+    checked = main; hasDictionary = false; dictionary = null; dictionaryError = null;
+    if (main == null) return;
+    SavedDictionaries.instance.has(main).catchError((Object _) => false).then((yes) {
+      if (!mounted || checked != main) return;
+      setState(() => hasDictionary = yes);
+      if (yes && wordsOn) loadDictionary(main);
+    });
+  }
+  Future<void> loadDictionary(String main) async {
+    try {
+      final loaded = await SavedDictionaries.instance.load(main);
+      if (mounted && checked == main) setState(() { dictionary = loaded; dictionaryError = null; });
+    } catch (e) {
+      if (mounted && checked == main) setState(() => dictionaryError = e);
+    }
+  }
+  void toggleWords(bool on, String main) {
+    setState(() { wordsOn = on; dictionaryError = null; });
+    if (on && dictionary == null) loadDictionary(main);
+  }
   @override Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final main = mainLanguage(chapter, language);
+    final chapter = widget.chapter, index = widget.index;
+    final main = ChapterLine.mainLanguage(chapter, widget.language);
+    checkDictionary(main);
+    final words = dictionary, failure = dictionaryError;
     Widget line(String language, TextStyle? style) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(languageNames[language] ?? language, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
       const SizedBox(height: 2),
       Text(chapter.text(language, index).isEmpty ? '—' : chapter.text(language, index), style: style),
     ]);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(context.tr('lineOf', {'index': index + 1, 'total': total}), style: theme.textTheme.labelMedium),
+      Row(children: [
+        Expanded(child: Text(context.tr('lineOf', {'index': index + 1, 'total': widget.total}), style: theme.textTheme.labelMedium)),
+        if (hasDictionary && main != null) FilterChip(label: Text(context.tr('wordTranslation')), selected: wordsOn, onSelected: (on) => toggleWords(on, main)),
+      ]),
       if (main != null) ...[
         const SizedBox(height: 16),
         line(main, theme.textTheme.headlineSmall),
-        for (final l in translationLanguages(chapter, main)) ...[const SizedBox(height: 20), line(l, theme.textTheme.bodyLarge)],
+        for (final l in ChapterLine.translationLanguages(chapter, main)) ...[const SizedBox(height: 20), line(l, theme.textTheme.bodyLarge)],
+        if (hasDictionary && wordsOn) ...[
+          const SizedBox(height: 20),
+          WordTranslationHeader(languages: wordTranslationLanguages(main)),
+          const SizedBox(height: 2),
+          if (failure != null) Text(readableError(failure), style: TextStyle(color: theme.colorScheme.error))
+          else if (words == null) const LinearProgressIndicator()
+          else WordTranslationLine(sentence: chapter.text(main, index).isEmpty ? '—' : chapter.text(main, index), dictionary: words, languages: wordTranslationLanguages(main)),
+        ],
       ],
     ]);
   }
