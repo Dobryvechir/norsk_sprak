@@ -39,6 +39,9 @@ class DictionaryStatus {
 }
 
 const _folder = 'dictionaries';
+/// In a browser, Dio's receive timeout also limits the whole transfer, and a large file takes long.
+/// Native downloads don't need this: there it only limits the wait for the response to begin.
+const _webDownloadTimeout = Duration(minutes: 20);
 String _fileNameOf(String lang) => 'dict_$lang.json';
 Future<Directory> _folderIn(String? root) async {
   final dir = Directory(p.join(root ?? (await getApplicationDocumentsDirectory()).path, _folder));
@@ -130,7 +133,7 @@ class Dictionaries {
     final url = api.url(dictionary.url), name = _fileNameOf(dictionary.lang);
     if (kIsWeb) {
       final response = await api.dio.get<List<int>>(url, cancelToken: cancel, onReceiveProgress: received,
-        options: Options(responseType: ResponseType.bytes));
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: _webDownloadTimeout));
       await browser.writeDocument(_folder, name, Uint8List.fromList(response.data!), 'application/json');
     } else {
       final target = p.join((await _dir()).path, name);

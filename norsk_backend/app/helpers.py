@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 # Language codes (ISO 639-1) that recordings and sentences may use.
 # Keep in sync with languageNames in the Flutter app (lib/l10n/l10n.dart).
-LANGUAGES = ("en", "nb", "uk", "ru", "de", "da", "sv", "cs", "bg", "pl", "pt", "es", "fr", "el", "he", "it")
+LANGUAGES = ("en", "nb", "nn", "uk", "ru", "de", "da", "sv", "cs", "bg", "pl", "pt", "es", "fr", "el", "he", "it")
 
 
 def new_id() -> str:

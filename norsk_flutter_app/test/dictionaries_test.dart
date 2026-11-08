@@ -117,6 +117,65 @@ void main() {
       for (final name in ['dict_nb.json.partial', 'notes.json', 'dict_.json']) { await File(p.join(dir.path, name)).writeAsString('{}'); }
       expect(await dictionaries.localSizes(), isEmpty);
     });
+
+    group('over real HTTP, compressed the way nginx does it (gzip, chunked, no length of the file)', () {
+      final file = utf8.encode('{"å": "ære"}' * 5000);
+      Dictionaries real(int port) => Dictionaries(Api()..baseUrl = 'http://127.0.0.1:$port', root: tmp.path);
+      DictionaryInfo info() => DictionaryInfo('nb', '/api/dictionary/nb', file.length);
+      String head(int chunk) => 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: gzip\r\n'
+        'Transfer-Encoding: chunked\r\n\r\n${chunk.toRadixString(16)}\r\n';
+
+      // Flutter's test binding replaces HttpClient with one that answers every request with 400.
+      late HttpOverrides? overrides;
+      setUp(() { overrides = HttpOverrides.current; HttpOverrides.global = null; });
+      tearDown(() => HttpOverrides.global = overrides);
+
+      /// Answers one request with [respond]; [requested] gets what the client sent.
+      Future<ServerSocket> serve(void Function(Socket) respond, [StringBuffer? requested]) async {
+        final listener = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        listener.listen((socket) {
+          socket.listen((data) { requested?.write(latin1.decode(data)); respond(socket); }, onError: (_) {});
+        });
+        addTearDown(listener.close);
+        return listener;
+      }
+
+      test('is saved unpacked, at the size the server lists, with progress up to 1', () async {
+        final packed = gzip.encode(file), requested = StringBuffer(), seen = <double>[];
+        expect(packed.length, lessThan(file.length));
+        final listener = await serve((socket) async {
+          socket..add(latin1.encode(head(packed.length)))..add(packed)..add(latin1.encode('\r\n0\r\n\r\n'));
+          await socket.flush();
+          await socket.close();
+        }, requested);
+
+        final dictionaries = real(listener.port);
+        await dictionaries.download(info(), seen.add);
+
+        expect(requested.toString().toLowerCase(), contains('accept-encoding: gzip'));
+        expect(await File(p.join(tmp.path, 'dictionaries', 'dict_nb.json')).readAsBytes(), file);
+        expect(DictionaryStatus.merge([info()], await dictionaries.localSizes()).single.needsUpdate, isFalse);
+        expect(seen.every((v) => v >= 0 && v <= 1), isTrue);
+        expect(seen.last, 1);
+      });
+
+      test('a connection lost halfway fails, and keeps the copy already saved', () async {
+        final dir = await Directory(p.join(tmp.path, 'dictionaries')).create(recursive: true);
+        final saved = File(p.join(dir.path, 'dict_nb.json'))..writeAsStringSync('{"old": 1}');
+        final packed = gzip.encode(file), half = packed.sublist(0, packed.length ~/ 2);
+        final listener = await serve((socket) async {
+          socket..add(latin1.encode(head(packed.length)))..add(half);
+          await socket.flush();
+          socket.destroy();
+        });
+
+        await expectLater(real(listener.port).download(info(), (_) {}),
+          throwsA(isA<DioException>().having((e) => e.response?.statusCode, 'status', isNot(400))));
+
+        expect(saved.readAsStringSync(), '{"old": 1}');
+        expect(dir.listSync().map((e) => p.basename(e.path)), ['dict_nb.json']);
+      });
+    });
   });
 
   test('status: Update only when both sides exist and sizes differ', () {

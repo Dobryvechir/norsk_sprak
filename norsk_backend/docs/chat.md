@@ -44,7 +44,7 @@ Pictures, audio, video and other files are uploaded by the app to the sender's o
 Google Drive (folder `chat`, or an existing file from `media`), shared as "anyone with
 the link can view", and only the link is sent. The server accepts attachment URLs only
 on `https://drive.google.com` / `https://docs.google.com`. Sending attachments needs the
-user's Google Drive token in the app's Settings; everybody can open the links.
+user's Google Drive to be connected in the app's Settings; everybody can open the links.
 Deleting a message's Drive file is up to its owner; expiry only deletes the message.
 
 ## Find location

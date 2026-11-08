@@ -39,7 +39,7 @@ MAX_PAGE_SIZE = 100
 SAMPLE_BOOKS = [{
     "id": "bible",
     "name": {
-        "en": "Bible", "nb": "Bibelen", "uk": "Біблія", "ru": "Библия",
+        "en": "Bible", "nb": "Bibelen", "nn": "Bibelen", "uk": "Біблія", "ru": "Библия",
         "de": "Bibel", "da": "Bibelen", "sv": "Bibeln", "cs": "Bible",
         "bg": "Библия", "pl": "Biblia", "pt": "Bíblia", "es": "Biblia",
         "fr": "Bible", "el": "Αγία Γραφή", "he": "כתבי הקודש", "it": "Bibbia",
@@ -55,7 +55,7 @@ SAMPLE_SECTIONS = [{
     "bookId": "bible",
     "order": 1,
     "name": {
-        "en": "Genesis", "nb": "Første Mosebok", "uk": "Буття", "ru": "Бытие",
+        "en": "Genesis", "nb": "Første Mosebok", "nn": "Første Mosebok", "uk": "Буття", "ru": "Бытие",
         "de": "1. Mose", "da": "Første Mosebog", "sv": "Första Moseboken", "cs": "Genesis",
         "bg": "Битие", "pl": "Księga Rodzaju", "pt": "Génesis", "es": "Génesis",
         "fr": "Genèse", "el": "Γένεσις", "he": "בראשית", "it": "Genesi",
@@ -83,6 +83,7 @@ SAMPLE_CHAPTERS = [{
         "nb": ["I begynnelsen skapte Gud himmelen og jorden.",
                "Og jorden var øde og tom, og det var mørke over det store dyp, og Guds Ånd svevde over vannene.",
                "Og Gud sa: Det bli lys! Og det blev lys."],
+        "nn": ["I opphavet skapte Gud himmelen og jorda."],
         "uk": ["На початку Бог створив небо та землю.",
                "А земля була пуста та порожня, і темрява була над безоднею, і Дух Божий ширяв над поверхнею води.",
                "І сказав Бог: Хай станеться світло! І сталося світло."],
