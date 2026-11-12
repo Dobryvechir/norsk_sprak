@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../l10n/l10n.dart';
 import '../services/api.dart';
@@ -8,7 +9,9 @@ class LoginScreen extends StatefulWidget {
   @override State<LoginScreen> createState() => _LoginScreenState();
 }
 class _LoginScreenState extends State<LoginScreen> {
-  final server = TextEditingController(text: 'https://your-server.example.com');
+  static String get defaultServer =>
+      kIsWeb && Uri.base.host == 'localhost' ? 'http://127.0.0.1:8000' : 'https://movna-hatka.com';
+  final server = TextEditingController(text: defaultServer);
   final email = TextEditingController(); final password = TextEditingController();
   bool busy = false, rememberName = false, keepLoggedIn = false;
   @override void initState() {
