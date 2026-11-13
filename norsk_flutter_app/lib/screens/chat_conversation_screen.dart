@@ -8,12 +8,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/l10n.dart';
 import '../models/chat.dart';
 import '../services/chat_api.dart';
+import '../services/drive_import.dart';
 import '../services/google_drive.dart';
 import '../services/media_store.dart';
 import 'audio_record_screen.dart';
 import 'camera_capture_screen.dart';
 import 'chat_members_screen.dart';
 import 'chat_widgets.dart';
+import 'drive_picker_screen.dart';
 import 'media_list_screen.dart';
 import 'media_view_screen.dart' show extensionFor;
 
@@ -137,6 +139,21 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       : drive.uploadBytes(folder, f.name, type, f.bytes!, onProgress: onProgress));
   }
 
+  /// Sends any file from the user's Google Drive: an ordinary file is copied on Drive into `chat` (so the
+  /// original stays private), while Google Docs, Sheets, Slides and Drawings are sent exported as PDF, XLSX or PNG.
+  Future<void> fromDrive() async {
+    final chosen = await pickFromDrive(context, const ImportTarget.any(), drive: drive);
+    if (chosen.isEmpty || !mounted) return;
+    final DrivePick(:file, :plan) = chosen.single;
+    final type = plan.mimeType;
+    await shareUpload(context, kindOf(type), plan.name, type, plan.method == ImportMethod.download ? file.size : null,
+      (folder, onProgress) async {
+        if (plan.method == ImportMethod.download) return drive.copy(file.id, name: plan.name, parentId: folder);
+        final got = await DriveImporter(drive).fetch(file, plan, onProgress: onProgress);
+        return drive.uploadBytes(folder, got.name, got.mimeType, got.bytes, onProgress: onProgress);
+      });
+  }
+
   /// Sends a picture, video or audio just captured: [context] is the capture screen's.
   Future<void> sendCaptured(BuildContext context, LocalMedia media, Duration? _) async {
     final kind = switch (media.kind) { MediaKind.picture => AttachmentKind.picture, MediaKind.video => AttachmentKind.video, MediaKind.audio => AttachmentKind.audio };
@@ -161,6 +178,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> attach() async {
     final choice = await showModalBottomSheet<String>(context: context, builder: (ctx) => SafeArea(child: ListView(shrinkWrap: true, children: [
       ListTile(leading: const Icon(Icons.upload_file), title: Text(ctx.tr('docUpload')), onTap: () => Navigator.pop(ctx, 'file')),
+      ListTile(leading: const Icon(Icons.add_to_drive), title: Text(ctx.tr('driveChooseFrom')), onTap: () => Navigator.pop(ctx, 'drive')),
       ListTile(leading: const Icon(Icons.photo_camera), title: Text(ctx.tr('mediaNewPicture')), onTap: () => Navigator.pop(ctx, 'picture')),
       ListTile(leading: const Icon(Icons.videocam), title: Text(ctx.tr('mediaNewVideo')), onTap: () => Navigator.pop(ctx, 'video')),
       ListTile(leading: const Icon(Icons.mic), title: Text(ctx.tr('mediaNewAudio')), onTap: () => Navigator.pop(ctx, 'audio')),
@@ -171,6 +189,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     ])));
     switch (choice) {
       case 'file': await uploadFile();
+      case 'drive': await fromDrive();
       case 'picture': capture(CameraCaptureScreen(kind: MediaKind.picture, onCaptured: sendCaptured));
       case 'video': capture(CameraCaptureScreen(kind: MediaKind.video, onCaptured: sendCaptured));
       case 'audio': capture(AudioRecordScreen(onCaptured: sendCaptured));

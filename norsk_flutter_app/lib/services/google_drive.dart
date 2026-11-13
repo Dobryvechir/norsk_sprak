@@ -14,9 +14,20 @@ class DriveFile {
   final String id, name, mimeType;
   /// In bytes, when asked for and known (Google Docs, Sheets etc. have none).
   final int? size;
-  const DriveFile(this.id, this.name, this.mimeType, {this.size});
-  factory DriveFile.fromJson(Map<String, dynamic> j) => DriveFile('${j['id']}', '${j['name'] ?? ''}', '${j['mimeType'] ?? ''}',
-    size: j['size'] == null ? null : int.tryParse('${j['size']}'));
+  /// A link to a small picture of the file made by Drive, when asked for and Drive has one.
+  final String? thumbnailLink;
+  const DriveFile(this.id, this.name, this.mimeType, {this.size, this.thumbnailLink});
+
+  /// A shortcut is read as the file it points to (keeping the shortcut's name).
+  factory DriveFile.fromJson(Map<String, dynamic> j) {
+    final target = j['shortcutDetails'];
+    final shortcut = j['mimeType'] == GoogleDrive.shortcutType && target is Map && target['targetId'] != null;
+    return DriveFile(shortcut ? '${target['targetId']}' : '${j['id']}', '${j['name'] ?? ''}',
+      shortcut ? '${target['targetMimeType'] ?? ''}' : '${j['mimeType'] ?? ''}',
+      size: j['size'] == null ? null : int.tryParse('${j['size']}'), thumbnailLink: j['thumbnailLink'] as String?);
+  }
+
+  bool get isFolder => mimeType == GoogleDrive.folderType;
 }
 
 /// One page of [DriveFile]s; [nextPageToken] is null on the last page.
@@ -31,6 +42,7 @@ class GoogleDrive {
   static const _api = 'https://www.googleapis.com/drive/v3/files';
   static const _upload = 'https://www.googleapis.com/upload/drive/v3/files';
   static const folderType = 'application/vnd.google-apps.folder';
+  static const shortcutType = 'application/vnd.google-apps.shortcut';
 
   GoogleDrive({Dio? dio, DriveAuth? auth})
     : _dio = dio ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(minutes: 10))),
@@ -136,6 +148,51 @@ class GoogleDrive {
     } while (token != null);
     return result;
   }
+
+  /// One page of what is in [folderId] (folders first), for choosing files anywhere in the user's Drive.
+  /// With [search], files and folders whose name contains it, anywhere; with [sharedWithMe], what others
+  /// have shared with the user (only the top level: shared folders are then opened by their id).
+  Future<DrivePage> browse({String folderId = 'root', String? search, bool sharedWithMe = false, String? pageToken, int pageSize = 50}) => _run(() async {
+    final q = [
+      'trashed = false',
+      if (search != null && search.trim().isNotEmpty) 'name contains ${_quote(search.trim())}'
+      else if (sharedWithMe) 'sharedWithMe = true'
+      else '${_quote(folderId)} in parents',
+    ].join(' and ');
+    final r = await _dio.get(_api, options: _auth(), queryParameters: {
+      'q': q, 'orderBy': 'folder,name_natural', 'pageSize': pageSize, 'spaces': 'drive',
+      'fields': 'nextPageToken,files(id,name,mimeType,size,thumbnailLink,shortcutDetails)',
+      'includeItemsFromAllDrives': true, 'supportsAllDrives': true,
+      if (pageToken != null) 'pageToken': pageToken,
+    });
+    final data = r.data as Map;
+    return DrivePage([for (final f in data['files'] as List) DriveFile.fromJson(Map<String, dynamic>.from(f as Map))],
+      data['nextPageToken'] as String?);
+  });
+
+  /// The Google Docs, Sheets, Slides or Drawings file [id] exported as [mimeType] (Drive allows up to 10 MB).
+  Future<Uint8List> export(String id, String mimeType, {ProgressCallback? onProgress}) => _run(() async {
+    final r = await _dio.get<List<int>>('$_api/$id/export', queryParameters: {'mimeType': mimeType}, onReceiveProgress: onProgress,
+      options: _auth(Options(responseType: ResponseType.bytes)));
+    final data = r.data!;
+    return data is Uint8List ? data : Uint8List.fromList(data);
+  });
+
+  /// Copies file [id] on Drive (nothing is downloaded); returns the copy's id. A Google [mimeType]
+  /// makes Drive convert it, e.g. an .xls into a Google Sheet.
+  Future<String> copy(String id, {String? name, String? parentId, String? mimeType}) => _run(() async {
+    final r = await _dio.post('$_api/$id/copy', queryParameters: {'fields': 'id', 'supportsAllDrives': true}, options: _auth(), data: {
+      if (name != null) 'name': name, if (parentId != null) 'parents': [parentId], if (mimeType != null) 'mimeType': mimeType,
+    });
+    return '${(r.data as Map)['id']}';
+  });
+
+  /// The content at [url], a Drive link such as a [DriveFile.thumbnailLink].
+  Future<Uint8List> downloadUrl(String url) => _run(() async {
+    final r = await _dio.get<List<int>>(url, options: _auth(Options(responseType: ResponseType.bytes)));
+    final data = r.data!;
+    return data is Uint8List ? data : Uint8List.fromList(data);
+  });
 
   /// Uploads the file at [path] (not on web) as [name] into [folderId]; returns the new file's id.
   Future<String> uploadFile(String folderId, String name, String mimeType, String path, {ProgressCallback? onProgress}) async {

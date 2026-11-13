@@ -5,9 +5,13 @@ import '../l10n/l10n.dart';
 import '../models/chat.dart';
 import '../services/api.dart';
 import '../services/chat_api.dart';
+import '../services/drive_auth.dart';
+import '../services/drive_import.dart';
+import '../services/google_drive.dart';
 import '../services/media_store.dart';
 import 'camera_capture_screen.dart';
 import 'chat_widgets.dart';
+import 'drive_picker_screen.dart';
 
 /// Longest side of the chat photo, in pixels (it is stored on our server, so it stays small).
 const chatPhotoSize = 96;
@@ -24,7 +28,7 @@ class _ChatProfileScreenState extends State<ChatProfileScreen> {
   late final name = TextEditingController(text: widget.status.displayName);
   /// The new photo, as a small PNG; null keeps the current one.
   Uint8List? photo;
-  bool saving = false;
+  bool saving = false, loadingDrive = false;
   String? error;
 
   @override void dispose() { name.dispose(); super.dispose(); }
@@ -41,6 +45,21 @@ class _ChatProfileScreenState extends State<ChatProfileScreen> {
     final bytes = result?.files.single.bytes;
     if (bytes != null) await usePicture(bytes);
   }
+
+  /// A picture from Google Drive: any picture format (a Drawing too), turned into PNG when needed.
+  Future<void> chooseOnDrive() async {
+    final chosen = await pickFromDrive(context, _pictureTarget);
+    if (chosen.isEmpty || !mounted) return;
+    setState(() { loadingDrive = true; error = null; });
+    try {
+      await usePicture((await DriveImporter(GoogleDrive()).fetch(chosen.single.file, chosen.single.plan)).bytes);
+    } catch (e) {
+      if (mounted) setState(() => error = e is DriveException ? e.message : readableError(e));
+    } finally { if (mounted) setState(() => loadingDrive = false); }
+  }
+
+  /// What this device can read itself; other pictures are converted to PNG.
+  static const _pictureTarget = ImportTarget(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 
   Future<void> takePicture() => Navigator.push(context, MaterialPageRoute(fullscreenDialog: true, builder: (_) => CameraCaptureScreen(
     kind: MediaKind.picture, onCaptured: (_, media, __) async { await usePicture(await media.readBytes()); await media.delete(); })));
@@ -69,6 +88,9 @@ class _ChatProfileScreenState extends State<ChatProfileScreen> {
         Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
           OutlinedButton.icon(onPressed: saving ? null : takePicture, icon: const Icon(Icons.photo_camera), label: Text(context.tr('chatTakePhoto'))),
           OutlinedButton.icon(onPressed: saving ? null : chooseFile, icon: const Icon(Icons.image), label: Text(context.tr('chatChoosePhoto'))),
+          if (DriveAuth.instance.configured) OutlinedButton.icon(onPressed: saving || loadingDrive ? null : chooseOnDrive,
+            icon: loadingDrive ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add_to_drive),
+            label: Text(context.tr('driveChooseFrom'))),
         ]),
         const SizedBox(height: 24),
         TextField(controller: name, enabled: !saving, maxLength: 60,
