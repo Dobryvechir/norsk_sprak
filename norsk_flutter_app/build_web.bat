@@ -1,1 +1,1 @@
-flutter build web --release --base-href /norsk-audio/
+flutter build web --release --wasm --base-href /norsk-audio/
