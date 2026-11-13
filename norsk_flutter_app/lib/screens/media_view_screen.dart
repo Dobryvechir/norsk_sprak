@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -8,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../l10n/l10n.dart';
 import '../services/google_drive.dart';
 import '../services/media_store.dart';
+import '../widgets/full_view.dart';
 
 /// Full screen view of [kind] [name] from Google Drive: a picture (zoomable), a video or an audio
 /// player, with a cross at the top left to go back. The file is downloaded into the temporary Media
@@ -87,16 +87,22 @@ String extensionFor(String mimeType) => switch (mimeType.split(';').first.trim()
   _ => '',
 };
 
-class _PictureView extends StatelessWidget {
+class _PictureView extends StatefulWidget {
   final LocalMedia media;
   const _PictureView({required this.media});
+  @override State<_PictureView> createState() => _PictureViewState();
+}
+
+class _PictureViewState extends State<_PictureView> {
+  late final Future<ImageProvider> image = widget.media.path != null && !kIsWeb
+    ? Future.value(FileImage(File(widget.media.path!)))
+    : widget.media.readBytes().then<ImageProvider>(MemoryImage.new);
+
   @override Widget build(BuildContext context) {
     final error = Center(child: Text(context.tr('mediaCannotShow'), style: const TextStyle(color: Colors.white)));
-    final image = media.path != null
-      ? Image.file(File(media.path!), fit: BoxFit.contain, errorBuilder: (_, __, ___) => error)
-      : FutureBuilder<Uint8List>(future: media.readBytes(), builder: (_, snap) => !snap.hasData ? const SizedBox.shrink()
-          : Image.memory(snap.data!, fit: BoxFit.contain, errorBuilder: (_, __, ___) => error));
-    return InteractiveViewer(maxScale: 8, child: SizedBox.expand(child: image));
+    return FutureBuilder<ImageProvider>(future: image, builder: (_, snap) => snap.hasError ? error
+      : !snap.hasData ? const Center(child: CircularProgressIndicator())
+      : FullImage(image: snap.data!, error: error));
   }
 }
 
@@ -129,7 +135,7 @@ class _VideoViewState extends State<_VideoView> {
     }
     if (!v.isInitialized) return const Center(child: CircularProgressIndicator());
     return Column(children: [
-      Expanded(child: GestureDetector(onTap: playPause, child: Center(child: AspectRatio(aspectRatio: v.aspectRatio, child: VideoPlayer(controller))))),
+      Expanded(child: GestureDetector(onTap: playPause, child: FullView(aspectRatio: v.aspectRatio, child: VideoPlayer(controller)))),
       SafeArea(top: false, child: Padding(padding: const EdgeInsets.fromLTRB(8, 0, 16, 8), child: Row(children: [
         IconButton(tooltip: context.tr('play'), color: white, iconSize: 36, onPressed: playPause,
           icon: Icon(v.isPlaying ? Icons.pause : Icons.play_arrow)),

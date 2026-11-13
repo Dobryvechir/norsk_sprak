@@ -6,6 +6,7 @@ import 'package:pdfrx/pdfrx.dart';
 import '../l10n/l10n.dart';
 import '../services/document_store.dart';
 import '../services/xlsx_reader.dart';
+import '../widgets/full_view.dart';
 
 /// Full screen view of a document on this device: a picture (zoomable; swipe for the others in
 /// [names]), a PDF (scrollable, zoomable) or a sheet (as a table, one tab per worksheet).
@@ -51,19 +52,25 @@ class _DocumentViewScreenState extends State<DocumentViewScreen> {
 Widget _message(BuildContext context, String text, {Color? color}) =>
   Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: color))));
 
-class _PictureView extends StatelessWidget {
+class _PictureView extends StatefulWidget {
   final String name;
   const _PictureView({required this.name});
+  @override State<_PictureView> createState() => _PictureViewState();
+}
+
+class _PictureViewState extends State<_PictureView> {
+  late final Future<ImageProvider> image = kIsWeb
+    ? DocumentStore.instance.read(DocFolder.pictures, widget.name).then<ImageProvider>(MemoryImage.new)
+    : DocumentStore.instance.filePath(DocFolder.pictures, widget.name).then<ImageProvider>((p) {
+        if (p == null) throw StateError('missing');
+        return FileImage(File(p));
+      });
+
   @override Widget build(BuildContext context) {
-    final store = DocumentStore.instance;
-    Widget error(BuildContext c) => _message(c, c.tr('mediaCannotShow'), color: Colors.white);
-    final Widget image = kIsWeb
-      ? FutureBuilder<Uint8List>(future: store.read(DocFolder.pictures, name), builder: (c, snap) => snap.hasError ? error(c)
-          : !snap.hasData ? const Center(child: CircularProgressIndicator())
-          : Image.memory(snap.data!, fit: BoxFit.contain, errorBuilder: (c, __, ___) => error(c)))
-      : FutureBuilder<String?>(future: store.filePath(DocFolder.pictures, name), builder: (c, snap) => !snap.hasData ? const SizedBox.shrink()
-          : Image.file(File(snap.data!), fit: BoxFit.contain, errorBuilder: (c, __, ___) => error(c)));
-    return InteractiveViewer(maxScale: 8, child: SizedBox.expand(child: image));
+    final error = _message(context, context.tr('mediaCannotShow'), color: Colors.white);
+    return FutureBuilder<ImageProvider>(future: image, builder: (c, snap) => snap.hasError ? error
+      : !snap.hasData ? const Center(child: CircularProgressIndicator())
+      : FullImage(image: snap.data!, error: error));
   }
 }
 
