@@ -170,9 +170,26 @@ void main() {
     expect(tokens.cleared, ['expired']);
   });
 
-  test('when not connected nothing is sent', () async {
+  test('when not connected the sign-in is opened, and the connection saved', () async {
     AppSettings.instance.driveConnected = false;
+    tokens.email = 'a@b.no';
+    expect(await drive.folder('media', create: true), isNotNull);
+    expect(tokens.interactiveCalls, 1);
+    expect((AppSettings.instance.driveConnected, AppSettings.instance.driveEmail), (true, 'a@b.no'));
+  });
+
+  test('when not connected and the sign-in is cancelled nothing is sent', () async {
+    AppSettings.instance.driveConnected = false;
+    tokens.interactiveError = const GoogleSignInException(code: GoogleSignInExceptionCode.canceled);
     await expectLater(drive.folder('media'), throwsA(isA<DriveException>()));
+    expect(fake.requests, isEmpty);
+    expect(AppSettings.instance.driveConnected, isFalse);
+  });
+
+  test('without a client ID nothing is shown or sent', () async {
+    tokens.configured = false;
+    await expectLater(drive.folder('media'), throwsA(isA<DriveException>()));
+    expect(tokens.interactiveCalls, 0);
     expect(fake.requests, isEmpty);
   });
 

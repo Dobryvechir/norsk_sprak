@@ -10,7 +10,6 @@ import '../models/chat.dart';
 import '../services/chat_api.dart';
 import '../services/google_drive.dart';
 import '../services/media_store.dart';
-import '../services/settings.dart';
 import 'audio_record_screen.dart';
 import 'camera_capture_screen.dart';
 import 'chat_members_screen.dart';
@@ -41,7 +40,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   ChatConversation get conv => widget.conversation;
   ChatApi get chat => widget.chat;
-  bool get canAttach => AppSettings.instance.driveConnected;
 
   @override void initState() {
     super.initState();
@@ -161,7 +159,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> attach() async {
-    if (!canAttach) { showChatError(context, trNow('chatDriveNeeded')); return; }
     final choice = await showModalBottomSheet<String>(context: context, builder: (ctx) => SafeArea(child: ListView(shrinkWrap: true, children: [
       ListTile(leading: const Icon(Icons.upload_file), title: Text(ctx.tr('docUpload')), onTap: () => Navigator.pop(ctx, 'file')),
       ListTile(leading: const Icon(Icons.photo_camera), title: Text(ctx.tr('mediaNewPicture')), onTap: () => Navigator.pop(ctx, 'picture')),
@@ -233,8 +230,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             })),
         const Divider(height: 1),
         Padding(padding: const EdgeInsets.fromLTRB(4, 4, 4, 4), child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          IconButton(tooltip: context.tr(canAttach ? 'chatAttach' : 'chatDriveNeeded'), onPressed: sending ? null : attach,
-            icon: Icon(Icons.attach_file, color: canAttach ? null : theme.disabledColor)),
+          IconButton(tooltip: context.tr('chatAttach'), onPressed: sending ? null : attach,
+            icon: const Icon(Icons.attach_file)),
           Expanded(child: TextField(controller: input, minLines: 1, maxLines: 5, maxLength: 4000, textInputAction: TextInputAction.newline,
             decoration: InputDecoration(hintText: context.tr('chatWrite'), counterText: '', border: const OutlineInputBorder(), isDense: true))),
           IconButton(tooltip: context.tr('chatSend'), onPressed: sending ? null : () => send(),

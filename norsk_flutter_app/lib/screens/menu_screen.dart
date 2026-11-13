@@ -4,7 +4,6 @@ import '../models/entities.dart';
 import '../services/api.dart';
 import '../services/chat_api.dart';
 import '../services/drive_auth.dart';
-import '../services/settings.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
 import 'chat_screen.dart';
@@ -56,8 +55,8 @@ class _MenuScreenState extends State<MenuScreen> {
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
       // Documents are kept on this device; only their synchronization needs Google Drive.
       entry(Icons.folder_copy, context.tr('menuDocuments'), () => open(const DocumentsScreen())),
-      // Media works with the user's own Google Drive, so it is shown only once that is connected in Settings.
-      if (AppSettings.instance.driveConnected) entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
+      // Media works with the user's own Google Drive; its first Drive call opens Google's sign-in when needed.
+      entry(Icons.perm_media, context.tr('menuMedia'), () => open(const MediaScreen())),
       entry(Icons.download_done, context.tr('menuSaved'), () => open(SavedChaptersScreen(api: widget.api))),
       entry(Icons.chat_bubble_outline, context.tr('menuChat'), () => open(ChatScreen(api: widget.api))),
       entry(Icons.settings, context.tr('menuSettings'), () => open(SettingsScreen(api: widget.api))),

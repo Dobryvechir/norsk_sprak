@@ -49,9 +49,17 @@ class DriveAuth {
   /// A token for Drive; [rejected] is one Drive has just refused, which must not be returned again.
   Future<String> token({String? rejected}) => _pending ??= _fetch(rejected).whenComplete(() => _pending = null);
 
+  /// Not connected yet (or logged out since): Google's sign-in and consent for [driveScopes] is opened
+  /// straight away, and the connection saved as [connect] does. Connected: a silent token when there is
+  /// one, else (none yet, expired or [rejected]) the same sign-in and consent is opened.
   Future<String> _fetch(String? rejected) async {
-    if (!AppSettings.instance.driveConnected) throw DriveException(trNow('driveNotConnected'));
+    if (!configured) throw DriveException(trNow('driveNotConfigured'));
     try {
+      if (!AppSettings.instance.driveConnected) {
+        final token = await _source.interactiveToken();
+        await AppSettings.instance.setDriveConnection(true, email: _source.email);
+        return token;
+      }
       if (rejected != null) await _source.clearToken(rejected);
       return await _source.silentToken() ?? await _source.interactiveToken();
     } on GoogleSignInException catch (e) {

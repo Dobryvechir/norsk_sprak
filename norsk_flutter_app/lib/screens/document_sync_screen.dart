@@ -3,7 +3,6 @@ import '../l10n/l10n.dart';
 import '../services/document_store.dart';
 import '../services/document_sync.dart';
 import '../services/google_drive.dart';
-import '../services/settings.dart';
 
 /// Synchronizes the documents on this device with the same folders on Google Drive (see
 /// [DocumentSync]), then shows what was done; conflicting files can be listed in a table.
@@ -37,7 +36,6 @@ class _DocumentSyncScreenState extends State<DocumentSyncScreen> {
 
   @override Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final connected = AppSettings.instance.driveConnected;
     final r = report;
     Widget stat(IconData icon, String key, int count, {Color? color}) =>
       ListTile(dense: true, leading: Icon(icon, color: color), title: Text(context.tr(key, {'count': count})));
@@ -46,8 +44,8 @@ class _DocumentSyncScreenState extends State<DocumentSyncScreen> {
       body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: ListView(padding: const EdgeInsets.all(16), children: [
         Text(context.tr('syncInfo'), style: theme.textTheme.bodyMedium),
         const SizedBox(height: 16),
-        if (!connected) Text(context.tr('driveNotConnected'), style: TextStyle(color: theme.colorScheme.error)),
-        FilledButton.icon(onPressed: running || !connected ? null : start, icon: const Icon(Icons.sync), label: Text(context.tr('syncStart'))),
+        // Without a connection, starting opens Google's sign-in (see DriveAuth).
+        FilledButton.icon(onPressed: running ? null : start, icon: const Icon(Icons.sync), label: Text(context.tr('syncStart'))),
         if (running) ...[
           const SizedBox(height: 24),
           LinearProgressIndicator(value: total == 0 ? null : done / total),
