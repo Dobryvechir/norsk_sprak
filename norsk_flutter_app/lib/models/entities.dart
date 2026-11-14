@@ -47,6 +47,36 @@ class SignupCandidate {
   }
 }
 
+enum NotificationLevel { info, warning, critical, fatal }
+
+/// A message from the system admin (see the server's routes/notifications.py).
+class AppNotification {
+  final String id, text;
+  final int severity;
+  final String? versionFrom, versionTo, groupId, userId;
+  final int? privilegeFrom, privilegeTo;
+  final DateTime? datetimeFrom, datetimeTo, createdAt;
+  const AppNotification(this.id, this.text, this.severity, {this.versionFrom, this.versionTo, this.groupId, this.userId,
+      this.privilegeFrom, this.privilegeTo, this.datetimeFrom, this.datetimeTo, this.createdAt});
+  /// <=10 info, 11-20 warning, 21-30 critical, >=31 fatal (the app shows only it and stops).
+  NotificationLevel get level => severity <= 10 ? NotificationLevel.info : severity <= 20 ? NotificationLevel.warning
+    : severity <= 30 ? NotificationLevel.critical : NotificationLevel.fatal;
+  bool get isFatal => level == NotificationLevel.fatal;
+  /// Last digit 0: shown every time.
+  bool get showAlways => !isFatal && severity % 10 == 0;
+  /// Last digit 1: shown only once.
+  bool get showOnce => !isFatal && severity % 10 == 1;
+  /// Any other last digit: shown until the user chooses "Do not remind again".
+  bool get dismissible => !isFatal && !showAlways && !showOnce;
+  static DateTime? _date(Object? v) => v == null ? null : DateTime.tryParse('$v')?.toLocal();
+  static int? _int(Object? v) => (v as num?)?.toInt();
+  factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification('${j['id']}', '${j['text'] ?? ''}', _int(j['severity']) ?? 0,
+    versionFrom: j['versionFrom'] as String?, versionTo: j['versionTo'] as String?,
+    groupId: j['groupId'] as String?, userId: j['userId'] as String?,
+    privilegeFrom: _int(j['privilegeFrom']), privilegeTo: _int(j['privilegeTo']),
+    datetimeFrom: _date(j['datetimeFrom']), datetimeTo: _date(j['datetimeTo']), createdAt: _date(j['created_at']));
+}
+
 /// One sentence of one language's audio, with its timing in that audio (what SentencePlayer plays).
 class Sentence {
   final int index, startMs, endMs;

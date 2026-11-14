@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
 import '../services/chat_api.dart';
 import '../services/drive_auth.dart';
+import '../services/notifications.dart';
+import '../widgets/notification_view.dart';
 import 'admin_menu_screen.dart';
 import 'books_screen.dart';
 import 'chat_screen.dart';
@@ -26,6 +30,10 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Back from the browser (e.g. after buying Pro): the groups may have changed.
   late final lifecycle = AppLifecycleListener(onResume: loadGroups);
   bool openingShop = false;
+  /// A fatal notification for this user: the app then shows only it (see [exitApp]).
+  AppNotification? fatal;
+  /// Where a fatal notification sends the web app.
+  static final exitUrl = Uri.parse('https://movna-hatka.com');
   @override void initState() {
     super.initState();
     lifecycle;
@@ -33,6 +41,35 @@ class _MenuScreenState extends State<MenuScreen> {
     final restored = widget.api.restoredGroups;
     widget.api.restoredGroups = null;
     if (restored != null) { groups = restored; } else { loadGroups(); }
+    WidgetsBinding.instance.addPostFrameCallback((_) => showNotifications());
+  }
+  /// Right after login (or a restored session): shows this user's notifications, most severe first.
+  /// A fatal one replaces the whole app, except for system admins, who must still be able to remove it.
+  Future<void> showNotifications() async {
+    final center = NotificationCenter(widget.api);
+    final user = widget.api.user;
+    final list = await center.pending();
+    if (!mounted || user == null) return;
+    final fatalOne = list.where((n) => n.isFatal).firstOrNull;
+    if (fatalOne != null && !user.systemAdmin) { locationResponder.stop(); setState(() => fatal = fatalOne); return; }
+    for (final n in list) {
+      if (!mounted) return;
+      if (n.showOnce) await center.dismiss(user.id, n.id);
+      if (!mounted) return;
+      if (await showNotificationDialog(context, n)) await center.dismiss(user.id, n.id);
+    }
+  }
+  /// After a fatal notification: logs out and leaves - the web app goes to the company site,
+  /// Android closes; where an app can't close itself (iOS) the login page is shown.
+  Future<void> exitApp() async {
+    DriveAuth.instance.signOut();
+    await widget.api.logout();
+    if (kIsWeb) {
+      try { if (await launchUrl(exitUrl, webOnlyWindowName: '_self')) return; } catch (_) {}
+    } else {
+      await SystemNavigator.pop();
+    }
+    widget.onLogout();
   }
   /// The groups decide whether the Admin entry is shown (admin of at least one group).
   Future<void> loadGroups() async {
@@ -63,7 +100,7 @@ class _MenuScreenState extends State<MenuScreen> {
   Future<void> logout() async { locationResponder.stop(); DriveAuth.instance.signOut(); await widget.api.logout(); widget.onLogout(); }
   Widget entry(IconData icon, String label, VoidCallback onTap) => Card(child: ListTile(
     leading: Icon(icon), title: Text(label), trailing: const Icon(Icons.chevron_right), onTap: onTap));
-  @override Widget build(BuildContext context) => Scaffold(
+  @override Widget build(BuildContext context) => fatal != null ? FatalNotificationView(notification: fatal!, onExit: exitApp) : Scaffold(
     appBar: AppBar(title: const Text('Norsk Audio')),
     body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520), child: ListView(padding: const EdgeInsets.all(16), children: [
       if (widget.api.user != null) Padding(padding: const EdgeInsets.only(bottom: 12),

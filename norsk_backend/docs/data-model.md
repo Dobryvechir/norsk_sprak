@@ -57,6 +57,26 @@ A paid Pro candidate is not kept here: it becomes a user at once (member of the
 "Advanced" group). Approval and payment copy `plan`, `payment` and the
 verification fields to the user, plus `candidate_id`.
 
+## `notifications`  (key: notification id)
+
+Messages a system admin shows in the app (see `routes/notifications.py`). Every
+field except `id`, `text` and `severity` may be `null` (= no limit).
+
+```json
+{
+  "id": "9b1f...",
+  "text": "The server is updated tonight at 22:00.",
+  "severity": 12,              // <=10 info, 11-20 warning, 21-30 critical, >=31 fatal;
+                               // last digit: 0 always, 1 once, else until "Do not remind again"
+  "versionFrom": "0.1.0", "versionTo": null,     // app versions, inclusive
+  "groupId": null, "userId": null,               // userId wins over groupId
+  "privilegeFrom": 0, "privilegeTo": 0,          // used when neither userId nor groupId is set
+  "datetimeFrom": "2026-11-14T08:00:00+00:00", "datetimeTo": null,
+  "created_at": "2026-11-14T07:00:00+00:00",
+  "created_by": "<admin user id>"
+}
+```
+
 ## `groups`  (key: group id)
 
 ```json

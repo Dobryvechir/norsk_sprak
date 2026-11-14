@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
+import '../version.dart';
 
 class Api {
   final Dio dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 3)));
@@ -163,6 +164,17 @@ class Api {
     return AppUser.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
   Future<void> rejectCandidate(String id) async { await post('/api/admin/candidates/$id/reject'); }
+  /// The notifications for the logged-in user that are valid now and for this app version, most severe first.
+  Future<List<AppNotification>> myNotifications() async {
+    final r = await dio.get(url('/api/me/notifications'), options: authOptions(), queryParameters: {'version': appVersion});
+    return [for (final e in r.data as List) AppNotification.fromJson(Map<String, dynamic>.from(e as Map))];
+  }
+  /// System admin: every notification, newest first.
+  Future<List<AppNotification>> allNotifications() async => [for (final e in (await get('/api/admin/notifications')).data as List)
+    AppNotification.fromJson(Map<String, dynamic>.from(e as Map))];
+  /// System admin: [fields] as in POST /api/admin/notifications (null = not set).
+  Future<void> createNotification(Map<String, dynamic> fields) async { await post('/api/admin/notifications', data: fields); }
+  Future<void> deleteNotification(String id) async { await delete('/api/admin/notifications/$id'); }
   Future<void> createGroup(String name) async { await post('/api/admin/groups', data: {'name': name}); }
   Future<void> addMember(String groupId, String userId, String role) async { await put('/api/groups/$groupId/members/$userId', {'role': role, 'enabled': true, 'quota': <String, dynamic>{}}); }
   /// Creates a recording in [groupId] from an audio file spoken in [language].

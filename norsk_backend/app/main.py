@@ -22,7 +22,7 @@ from .chat import purge_expired
 from .config import settings
 from .migrations import upgrade_recordings
 from .repository import repo
-from .routes import admin, auth, bible, books, chat, dictionaries, groups, plans, recordings, signup
+from .routes import admin, auth, bible, books, chat, dictionaries, groups, notifications, plans, recordings, signup
 from .routes.admin import new_user
 from .routes.auth import find_user_by_email
 
@@ -98,6 +98,7 @@ app.include_router(books.router)
 app.include_router(bible.router)
 app.include_router(chat.router)
 app.include_router(dictionaries.router)
+app.include_router(notifications.router)
 
 
 @app.get("/api/health")

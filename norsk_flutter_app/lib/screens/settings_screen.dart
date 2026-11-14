@@ -4,6 +4,7 @@ import '../services/api.dart';
 import '../services/dictionaries.dart';
 import '../services/drive_auth.dart';
 import '../services/settings.dart';
+import '../version.dart';
 import 'dictionaries_screen.dart';
 /// Language preferences and the connection to the user's Google Drive, kept locally on this device.
 class SettingsScreen extends StatelessWidget {
@@ -35,6 +36,8 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 24),
         OutlinedButton.icon(icon: const Icon(Icons.menu_book), label: Text(context.tr('manageDictionaries')),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DictionariesScreen(dictionaries: Dictionaries(api))))),
+        const SizedBox(height: 24),
+        Text(context.tr('appVersion', {'version': appVersion}), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
       ]))));
   }
 }

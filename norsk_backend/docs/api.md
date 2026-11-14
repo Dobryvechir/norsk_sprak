@@ -90,6 +90,21 @@ ago, has not been used before, the solution is correct, and the hidden honeypot 
 The IP is the direct peer, or `X-Real-IP` / the last `X-Forwarded-For` entry
 when the peer is a loopback/private address (i.e. the reverse proxy).
 
+## Notifications (`routes/notifications.py`)
+
+| Method | Path | Who | Body → Response |
+|---|---|---|---|
+| GET | `/api/me/notifications?version=` | any | → the notifications for this user that are valid now and (when `version` is given) for that app version, most severe first. The app calls it after login |
+| GET | `/api/admin/notifications` | sysadmin | → every notification, newest first |
+| POST | `/api/admin/notifications` | sysadmin | `{text, severity (≥0), versionFrom?, versionTo?, groupId?, userId? (id or email), privilegeFrom?, privilegeTo?, datetimeFrom?, datetimeTo? (ISO-8601, no zone = UTC)}` → `201` notification. Empty strings mean "not set". `404` unknown user/group, `422` bad version/date or a range whose start is after its end |
+| DELETE | `/api/admin/notifications/{nid}` | sysadmin | → `{id, deleted: true}`. `404` if not found |
+
+Recipient: `userId` set → only that user; else `groupId` → enabled members of that group; else
+`privilegeFrom`/`privilegeTo` → members of any group whose `privilege` is in the range; else everybody.
+Date and version limits apply on top. All ranges include both ends. Versions compare by their
+numbers (`0.1.0+1` = `0.1`). How the app shows a notification (by `severity`) is described in
+`routes/notifications.py`.
+
 ## Group management (`routes/groups.py`)
 
 | Method | Path | Who | Body → Response |

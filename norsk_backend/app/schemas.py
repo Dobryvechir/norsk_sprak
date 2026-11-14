@@ -161,3 +161,22 @@ class StartPaymentRequest(CandidateRef):
 
 class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=10, max_length=200)
+
+
+# --- Notifications (routes/notifications.py) ---
+
+class CreateNotificationRequest(BaseModel):
+    """A message shown in the app. Optional fields left out (or empty) mean "no limit";
+    see routes/notifications.py for who receives it."""
+
+    text: str = Field(min_length=1, max_length=5000)
+    # <=10 info, 11-20 warning, 21-30 critical, >=31 fatal; last digit: 0 always, 1 once, else until dismissed
+    severity: int = Field(ge=0, le=1000)
+    versionFrom: str | None = Field(default=None, max_length=50)
+    versionTo: str | None = Field(default=None, max_length=50)
+    groupId: str | None = Field(default=None, max_length=64)
+    userId: str | None = Field(default=None, max_length=254)  # user id or email
+    privilegeFrom: int | None = None
+    privilegeTo: int | None = None
+    datetimeFrom: str | None = Field(default=None, max_length=40)  # ISO-8601; without zone = UTC
+    datetimeTo: str | None = Field(default=None, max_length=40)
