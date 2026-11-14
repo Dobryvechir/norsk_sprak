@@ -58,14 +58,21 @@
 </main>
 <script>
   const params = new URLSearchParams(location.search);
-  const ref = { candidateId: params.get('c') || '', token: params.get('t') || '' };
-  const query = `c=${encodeURIComponent(ref.candidateId)}&t=${encodeURIComponent(ref.token)}`;
-  document.getElementById('back').href = `../plan/?${query}`;
+  // A new sign-up (c = candidate id) or a logged-in Basic user changing to Pro (u = user id).
+  const ref = { candidateId: params.get('c') || '', userId: params.get('u') || '', token: params.get('t') || '' };
+  const upgrade = !!ref.userId;
+  const query = upgrade ? `u=${encodeURIComponent(ref.userId)}&t=${encodeURIComponent(ref.token)}`
+                        : `c=${encodeURIComponent(ref.candidateId)}&t=${encodeURIComponent(ref.token)}`;
+  const back = document.getElementById('back');
+  back.href = upgrade ? `../upgrade/?${query}` : `../plan/?${query}`;
+  if (upgrade) back.textContent = 'Back';
   const message = document.getElementById('message');
   const show = (text, kind) => { message.textContent = text; message.className = kind; };
   const post = (path, data) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                              body: JSON.stringify({ ...ref, ...data }) });
-  const THANKS = 'Payment received. Thank you for registration, check your email.';
+  const THANKS = upgrade ? 'Payment received. You now have the Pro plan; go back to the app.'
+                         : 'Payment received. Thank you for registration, check your email.';
+  const COMPLETE = upgrade ? 'You already have the Pro plan.' : 'Your registration is already complete.';
   const currency = () => document.querySelector('input[name=currency]:checked').value;
   // Where a payment provider sends the payer back to (this page, marked with the provider).
   const returnUrl = (provider) => `${location.origin}${location.pathname}?${query}&${provider}=1`;
@@ -78,14 +85,14 @@
   async function failed(response) {
     let detail = '';
     try { detail = (await response.json()).detail || ''; } catch (e) { /* not JSON */ }
-    show(response.status === 409 ? 'Your registration is already complete.' : `Payment failed. ${detail}`.trim(), 'error');
+    show(response.status === 409 ? COMPLETE : `Payment failed. ${detail}`.trim(), 'error');
   }
 
   // Ask the server (which asks the provider) until the payment is decided.
   async function checkPayment(provider, name) {
     show(`Checking the ${name} payment…`, '');
     for (let attempt = 0; attempt < 20; attempt++) {
-      const r = await post(`../api/shop/${provider}/status`, {});
+      const r = await post(`../../api/shop/${provider}/status`, {});
       if (!r.ok) return failed(r);
       const s = await r.json();
       if (s.paid) return finished(THANKS);
@@ -122,7 +129,7 @@
         try {
           const { error: submitError } = await elements.submit();
           if (submitError) { show(submitError.message, 'error'); return; }
-          const r = await post('../api/shop/stripe/start', { currency: currency() });
+          const r = await post('../../api/shop/stripe/start', { currency: currency() });
           if (!r.ok) { event.paymentFailed({ reason: 'fail' }); return failed(r); }
           const { clientSecret } = await r.json();
           const { error } = await stripe.confirmPayment({
@@ -153,22 +160,25 @@
     button.addEventListener('click', async () => {
       if (busy) return;
       busy = true; button.disabled = true; show('Opening Vipps…', '');
-      const r = await post('../api/shop/vipps/start', { currency: currency() });
+      const r = await post('../../api/shop/vipps/start', { currency: currency() });
       if (r.ok) { location.href = (await r.json()).redirectUrl; return; }
       busy = false; update(); failed(r);
     });
   }
 
   async function start() {
-    const stateResponse = await fetch(`../api/plan/state?${query}`);
+    const stateResponse = await fetch(`../../api/plan/state?${query}`);
     if (!stateResponse.ok) {
       document.getElementById('shop').classList.add('hidden');
-      return show(stateResponse.status === 403 ? 'This link is not valid.' : 'Registration not found.', 'error');
+      return show(stateResponse.status === 403 ? (upgrade ? 'This link is not valid or has expired. Open it again from the app.'
+                                                          : 'This link is not valid.')
+                                               : 'Registration not found.', 'error');
     }
     const s = await stateResponse.json();
     if (s.paid) return finished(THANKS);
+    if (upgrade && !s.upgradable) return finished(COMPLETE);
     document.getElementById('lead').textContent = `Pro plan for ${s.email}. Choose currency and how to pay.`;
-    const config = await (await fetch(`../api/shop/config?${query}`)).json();
+    const config = await (await fetch(`../../api/shop/config?${query}`)).json();
     setupWallets(config); setupVipps(config);
     if (params.get('vipps')) checkPayment('vipps', 'Vipps');
     if (params.get('stripe')) {

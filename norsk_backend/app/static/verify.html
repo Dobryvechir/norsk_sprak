@@ -40,7 +40,7 @@
   button.addEventListener('click', async () => {
     button.disabled = true; show('Checking…', '');
     try {
-      const r = await fetch('../api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch('../../api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                                body: JSON.stringify({ token }) });
       if (r.ok) {
         const result = await r.json();

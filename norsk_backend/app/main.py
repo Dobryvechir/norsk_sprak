@@ -50,7 +50,8 @@ async def lifespan(app: FastAPI):
     # Code before `yield` runs once when the server starts.
     create_bootstrap_admin()
     upgrade_recordings()
-    plans.ensure_plan_groups()  # "Basic" and "Advanced"
+    plans.ensure_group_privileges()  # old groups get privilege 7
+    plans.ensure_plan_groups()  # "Basic" (privilege 0) and "Advanced" (privilege 1)
     books.seed_sample_books()
     purge_expired(force=True)
     yield

@@ -49,7 +49,7 @@
 <body>
 <main>
   <h1>Norsk Audio</h1>
-  <p class="lead">Ask for an account. An administrator reviews every request.</p>
+  <p class="lead">Ask for an account. An administrator reviews every request within 10 business days.</p>
   <form id="form" novalidate>
     <label for="email">Email</label>
     <input id="email" name="email" type="email" autocomplete="email" required maxlength="254">
@@ -108,7 +108,7 @@
     if (!event.isTrusted || robot.dataset.state !== 'idle') return; // a real click only, once
     robot.dataset.state = 'working'; robotLabel.textContent = 'Checking…';
     try {
-      const response = await post('api/captcha');
+      const response = await post('../api/captcha');
       if (!response.ok) throw new Error('captcha');
       const captcha = await response.json();
       robotProof = { captchaToken: captcha.token, captchaSolution: await solve(captcha) };
@@ -135,12 +135,12 @@
     button.disabled = true; show('Sending…', '');
     try {
       const fields = { email, password, info: form.info.value.trim() };
-      const checked = await post('api/checksum', fields);
+      const checked = await post('../api/checksum', fields);
       if (!checked.ok) throw new Error('checksum');
       const { checksum } = await checked.json();
       if (!checksum) throw new Error('checksum');
 
-      const response = await post('api/signup',
+      const response = await post('../api/signup',
         { ...fields, checksum, ...robotProof, website: form.website.value });
       if (response.ok) {
         const { id, planToken } = await response.json();

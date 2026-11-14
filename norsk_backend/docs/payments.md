@@ -10,16 +10,29 @@ Neither charges a monthly fee, only fees per transaction.
 ## Flow
 
 ```
-/signup ──► /plan/ ──Basic──► "Thank you for registration, check your email"
+/app/signup ──► /app/plan/ ──Basic──► "Thank you for registration, check your email"
                   │            candidate waits for a system admin (dialog suggests group "Basic")
-                  └─Pro────► /shop/ ── Apple Pay / Google Pay (Stripe) or Vipps ──► paid
+                  └─Pro────► /app/shop/ ── Apple Pay / Google Pay (Stripe) or Vipps ──► paid
                                          candidate becomes a user at once, role viewer in "Advanced"
-email link ──► /verify/?token=… ──► email_verified = true (candidate or user)
+email link ──► /app/verify/?token=… ──► email_verified = true (candidate or user)
+
+app (user in a privilege-0 group) ── menu "Change to Pro plan" ──► browser /app/upgrade/?u=…&t=…
+      ──Buy──► /app/shop/?u=…&t=… ──► paid: the same user leaves "Basic" and joins "Advanced" (viewer)
 ```
+
+* `/app/plan/` and `/app/upgrade/` show what Pro gives: access to AI services and the "Advanced" group's
+  limits (chat kB a day, subgroups a year, days messages are kept; AI minutes a month if set),
+  read from `GET /api/plan/pro-info`, with links to `/app/terms_of_sale` and `/app/privacy_policy`
+  (`app/static/terms_of_sale.html`, `app/static/privacy_policy.html`).
+* Upgrading: `POST /api/me/upgrade-link` gives the app a link with an upgrade token (an HMAC of the
+  user id and an expiry, valid 1 day). The payment is kept on the user's record (`payment`; an older
+  paid payment moves to `payment_history`). Once paid, the user's memberships in privilege-0 groups
+  are deleted and a viewer membership in "Advanced" is added; other groups are kept. Stripe
+  intents carry `metadata.user_id` instead of `metadata.candidate_id`.
 
 * Prices (`payments/__init__.py`): **30 EUR / 32 USD / 320 NOK**. Vipps takes NOK and EUR only.
   NOK is the cheapest for you: other currencies cost conversion fees on payout.
-* The `/plan/` and `/shop/` URLs carry `c` (candidate id) and `t`, an HMAC of the id keyed with
+* The `/app/plan/` and `/app/shop/` URLs carry `c` (candidate id) and `t`, an HMAC of the id keyed with
   `<DATA_DIR>/key/key.txt`, so only the person who signed up can choose the plan or pay.
 * Basic sends the verification email when chosen. Pro sends it right after payment.
 * The verification page confirms only on a button press, so mail scanners that open links
@@ -33,7 +46,7 @@ email link ──► /verify/?token=… ──► email_verified = true (candida
 ## Vipps MobilePay (direct, ePayment API)
 
 `payments/vipps.py`: access token → create payment (`WEB_REDIRECT`) → the payer approves in Vipps
-→ returns to `/shop/?…&vipps=1`, which polls `/api/shop/vipps/status` → the server reads the
+→ returns to `/app/shop/?…&vipps=1`, which polls `/api/shop/vipps/status` → the server reads the
 payment and **captures** it when `AUTHORIZED` (the plan is delivered at once).
 
 Setup:
@@ -51,7 +64,7 @@ Setup:
 
 ## Apple Pay and Google Pay (Stripe)
 
-`payments/stripe_api.py` + Stripe's **Express Checkout Element** on `/shop/`:
+`payments/stripe_api.py` + Stripe's **Express Checkout Element** on `/app/shop/`:
 
 1. Stripe.js (loaded from `js.stripe.com`, as Stripe requires) shows the Apple Pay button in
    Safari on Apple devices and the Google Pay button in Chrome/Android, whichever the browser supports.
@@ -60,7 +73,7 @@ Setup:
    `payment_method_types=card`, `metadata.candidate_id`) and returns its `client_secret`.
 3. The page calls `stripe.confirmPayment(...)`. Stripe receives the wallet token (encrypted for
    Stripe, so this server never sees card numbers), runs 3-D Secure if the bank wants it and
-   charges the card. A 3-D Secure redirect comes back to `/shop/?…&stripe=1`.
+   charges the card. A 3-D Secure redirect comes back to `/app/shop/?…&stripe=1`.
 4. The page polls `POST /api/shop/stripe/status`; the server reads the intent from Stripe.
    When it has `succeeded` with the full amount in the right currency, the candidate becomes a
    user. The wallet (`applepay` / `googlepay`) is read from the charge.
@@ -74,7 +87,7 @@ Setup:
    `STRIPE_PUBLISHABLE_KEY` (`pk_test_…`). Keep the secret key out of git (`.env` only).
 3. Dashboard → Settings → Payment methods: make sure **Cards**, **Apple Pay** and **Google Pay**
    are on.
-4. Dashboard → Settings → **Payment method domains**: add the domain that serves `/shop/`
+4. Dashboard → Settings → **Payment method domains**: add the domain that serves `/app/shop/`
    (needed for Apple Pay; Apple Pay works only over HTTPS on a registered domain). If Stripe
    asks you to host Apple's verification file, put it in `APPLE_PAY_DOMAIN_ASSOCIATION_FILE`; it is
    served at `/.well-known/apple-developer-merchantid-domain-association`.

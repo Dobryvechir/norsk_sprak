@@ -27,6 +27,7 @@ const stringsBg = <String, String>{
   'menuBooks': 'Книги',
   'menuChat': 'Чат',
   'menuSettings': 'Настройки',
+  'menuChangeToPro': 'Преминете към план Pro',
   'menuAdmin': 'Администрация',
   'menuLogout': 'Изход',
   'noGroups': 'Все още не сте член на нито една група.',

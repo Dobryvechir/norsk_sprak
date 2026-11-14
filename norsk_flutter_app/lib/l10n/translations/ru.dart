@@ -27,6 +27,7 @@ const stringsRu = <String, String>{
   'menuBooks': 'Книги',
   'menuChat': 'Чат',
   'menuSettings': 'Настройки',
+  'menuChangeToPro': 'Перейти на тариф Pro',
   'menuAdmin': 'Администрирование',
   'menuLogout': 'Выйти',
   'noGroups': 'Вы пока не состоите ни в одной группе.',

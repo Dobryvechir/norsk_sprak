@@ -36,12 +36,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
   Future<void> openSignup() async {
     final base = server.text.trim().replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.tryParse('$base/signup');
+    final uri = Uri.tryParse('$base/app/signup');
     var ok = false;
     if (base.isNotEmpty && uri != null && uri.hasScheme && uri.host.isNotEmpty) {
       try { ok = await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
     }
-    if (!ok && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(base.isEmpty || uri == null || !uri.hasScheme ? context.tr('invalidServerUrl') : context.tr('linkOpenFailed', {'url': '$base/signup'}))));
+    if (!ok && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(base.isEmpty || uri == null || !uri.hasScheme ? context.tr('invalidServerUrl') : context.tr('linkOpenFailed', {'url': '$base/app/signup'}))));
   }
   @override Widget build(BuildContext context) => Scaffold(body: Center(child: SingleChildScrollView(
     padding: const EdgeInsets.all(24), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 440), child: Column(

@@ -27,6 +27,7 @@ const stringsPt = <String, String>{
   'menuBooks': 'Livros',
   'menuChat': 'Chat',
   'menuSettings': 'Definições',
+  'menuChangeToPro': 'Mudar para o plano Pro',
   'menuAdmin': 'Administração',
   'menuLogout': 'Terminar sessão',
   'noGroups': 'Ainda não é membro de nenhum grupo.',

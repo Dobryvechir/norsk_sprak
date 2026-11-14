@@ -27,6 +27,7 @@ const stringsFr = <String, String>{
   'menuBooks': 'Livres',
   'menuChat': 'Chat',
   'menuSettings': 'Paramètres',
+  'menuChangeToPro': 'Passer au forfait Pro',
   'menuAdmin': 'Administration',
   'menuLogout': 'Se déconnecter',
   'noGroups': 'Vous n’êtes encore membre d’aucun groupe.',

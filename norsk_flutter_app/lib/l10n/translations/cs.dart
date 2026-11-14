@@ -27,6 +27,7 @@ const stringsCs = <String, String>{
   'menuBooks': 'Knihy',
   'menuChat': 'Chat',
   'menuSettings': 'Nastavení',
+  'menuChangeToPro': 'Přejít na plán Pro',
   'menuAdmin': 'Správa',
   'menuLogout': 'Odhlásit se',
   'noGroups': 'Zatím nejste členem žádné skupiny.',

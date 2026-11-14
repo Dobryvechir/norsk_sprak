@@ -117,6 +117,11 @@ class Api {
   /// Whether the user may see the Admin menu: system admins and admins of at least one group.
   bool hasAdminRights(List<StudyGroup> groups) => user?.systemAdmin == true || groups.any((g) => g.isAdmin);
 
+  /// Whether to offer "Change to Pro plan": an ordinary user in a privilege-0 ("Basic") group.
+  bool canChangeToPro(List<StudyGroup> groups) => user != null && user?.systemAdmin != true && groups.any((g) => g.isBasic);
+  /// The web page where this user buys the Pro plan (the link carries a token for this user).
+  Future<Uri> upgradeLink() async => Uri.parse('${Map<String, dynamic>.from((await post('/api/me/upgrade-link')).data as Map)['url']}');
+
   Future<List<StudyGroup>> groups() async => [for (final e in (await get('/api/me/groups')).data as List)
     StudyGroup.fromJson(Map<String, dynamic>.from(e as Map))];
   Future<PagedList<T>> _paged<T>(String path, Map<String, dynamic> query, T Function(Map<String, dynamic>) item) async {

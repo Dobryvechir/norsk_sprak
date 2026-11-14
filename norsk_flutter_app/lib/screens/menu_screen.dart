@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
@@ -22,8 +23,12 @@ class _MenuScreenState extends State<MenuScreen> {
   List<StudyGroup> groups = const [];
   /// Answers family members' "Find location" while the app runs (see ChatLocationResponder).
   late final locationResponder = ChatLocationResponder(ChatApi(widget.api));
+  /// Back from the browser (e.g. after buying Pro): the groups may have changed.
+  late final lifecycle = AppLifecycleListener(onResume: loadGroups);
+  bool openingShop = false;
   @override void initState() {
     super.initState();
+    lifecycle;
     locationResponder.start();
     final restored = widget.api.restoredGroups;
     widget.api.restoredGroups = null;
@@ -39,7 +44,22 @@ class _MenuScreenState extends State<MenuScreen> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     loadGroups(); // roles may have changed meanwhile
   }
-  @override void dispose() { locationResponder.stop(); super.dispose(); }
+  @override void dispose() { lifecycle.dispose(); locationResponder.stop(); super.dispose(); }
+  /// Opens the Pro plan page in the web browser, with a link made for this user.
+  Future<void> changeToPro() async {
+    if (openingShop) return;
+    setState(() => openingShop = true);
+    String? error;
+    try {
+      final link = await widget.api.upgradeLink();
+      var ok = false;
+      try { ok = await launchUrl(link, mode: LaunchMode.externalApplication); } catch (_) {}
+      if (!ok && mounted) error = context.tr('linkOpenFailed', {'url': '$link'});
+    } catch (e) { error = readableError(e); }
+    if (!mounted) return;
+    setState(() => openingShop = false);
+    if (error != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
   Future<void> logout() async { locationResponder.stop(); DriveAuth.instance.signOut(); await widget.api.logout(); widget.onLogout(); }
   Widget entry(IconData icon, String label, VoidCallback onTap) => Card(child: ListTile(
     leading: Icon(icon), title: Text(label), trailing: const Icon(Icons.chevron_right), onTap: onTap));
@@ -51,6 +71,7 @@ class _MenuScreenState extends State<MenuScreen> {
       if (widget.api.offline) Card(color: Theme.of(context).colorScheme.secondaryContainer, child: ListTile(
         leading: const Icon(Icons.cloud_off), title: Text(context.tr('offlineMode')),
         trailing: IconButton(tooltip: context.tr('refresh'), onPressed: loadGroups, icon: const Icon(Icons.refresh)))),
+      if (widget.api.canChangeToPro(groups)) entry(Icons.workspace_premium, context.tr('menuChangeToPro'), changeToPro),
       entry(Icons.headphones, context.tr('menuRecords'), () => open(GroupsScreen(api: widget.api))),
       entry(Icons.menu_book, context.tr('menuBooks'), () => open(BooksScreen(api: widget.api))),
       // Documents are kept on this device; only their synchronization needs Google Drive.

@@ -27,6 +27,7 @@ const stringsEl = <String, String>{
   'menuBooks': 'Βιβλία',
   'menuChat': 'Συνομιλία',
   'menuSettings': 'Ρυθμίσεις',
+  'menuChangeToPro': 'Αλλαγή σε πρόγραμμα Pro',
   'menuAdmin': 'Διαχείριση',
   'menuLogout': 'Αποσύνδεση',
   'noGroups': 'Δεν είστε ακόμη μέλος καμίας ομάδας.',

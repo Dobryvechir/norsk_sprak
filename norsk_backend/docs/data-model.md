@@ -37,7 +37,7 @@ or rejecting removes the record. At most `LIMIT_SAME_API` (50) records may share
   "browser": "Chrome 131 / Windows",   // short form of the User-Agent
   "created_at": "2026-11-14T10:00:00+00:00",
   "status": "pending",                 // always "pending" (decided records are removed)
-  // Added by /plan/, /shop/ and /verify/ (routes/plans.py):
+  // Added by /app/plan/, /app/shop/ and /app/verify/ (routes/plans.py):
   "plan": "basic",                     // "basic" | "pro"; missing until chosen
   "payment": {                         // only for "pro"
     "status": "failed",                // "processing" | "paid" | "failed"
@@ -65,6 +65,7 @@ verification fields to the user, plus `candidate_id`.
   "name": "Norskkurs A2",
   "ai": {"provider": "openai", "model": "whisper-1", "monthly_audio_minutes_limit": null},
   "created_at": "2026-10-16T12:00:00+00:00",
+  "privilege": 7,                // int; plan groups: "Basic" 0, "Advanced" 1; others 7 by default
   "anonymous": false,            // chat settings; missing ones count as these defaults
   "family": false,
   "subgroupLimitPerYear": 20,

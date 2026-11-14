@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import time
+import urllib.parse
 
 import pytest
 
@@ -25,7 +26,7 @@ def outbox(monkeypatch):
     """Emails 'sent' during a test: (to, subject, text)."""
     sent = []
     monkeypatch.setattr(mailer, "send", lambda to, subject, text, html=None: sent.append((to, subject, text)))
-    monkeypatch.setattr(settings, "public_base_url", "https://norsk.example.com/app/")
+    monkeypatch.setattr(settings, "public_base_url", "https://norsk.example.com/")
     monkeypatch.setattr(settings, "payment_environment", "test")
     return sent
 
@@ -48,10 +49,10 @@ def link_token(outbox):
 
 
 def test_pages_are_served():
-    for path in ("/plan/", "/shop/", "/verify/"):
+    for path in ("/app/plan/", "/app/shop/", "/app/verify/"):
         r = client.get(path)
         assert r.status_code == 200 and "text/html" in r.headers["content-type"]
-    r = client.get("/plan?c=1&t=2", follow_redirects=False)
+    r = client.get("/app/plan?c=1&t=2", follow_redirects=False)
     assert r.status_code == 307 and r.headers["location"] == "plan/?c=1&t=2"
 
 
@@ -61,6 +62,15 @@ def test_groups_basic_and_advanced_exist():
     names = {g["name"] for g in repo.list("groups")}
     assert {"Basic", "Advanced"} <= names
     assert sum(g["name"] == "Advanced" for g in repo.list("groups")) == 1  # not created twice
+    assert repo.get("groups", plans.plan_group_id("basic"))["privilege"] == 0
+    assert repo.get("groups", plans.plan_group_id("pro"))["privilege"] == 1
+
+
+def test_old_groups_get_privilege_7():
+    repo.put("groups", "oldgroup", {"id": "oldgroup", "name": "Old"})
+    plans.ensure_group_privileges()
+    assert repo.get("groups", "oldgroup")["privilege"] == 7
+    repo.delete("groups", "oldgroup")
 
 
 def test_basic_plan_sends_email_and_verify(outbox):
@@ -131,12 +141,12 @@ class FakeStripe:
         monkeypatch.setattr(stripe_api, "create_payment_intent", self.create)
         monkeypatch.setattr(stripe_api, "get_payment_intent", lambda intent_id: dict(self.intents[intent_id]))
 
-    def create(self, reference, amount, currency, candidate_id, description):
+    def create(self, reference, amount, currency, metadata, description):
         intent_id = f"pi_{len(self.intents) + 1}"
         self.intents[intent_id] = {"id": intent_id, "client_secret": f"{intent_id}_secret_x", "amount": amount,
                                    "amount_received": 0, "currency": currency.lower(),
                                    "status": "requires_payment_method", "latest_charge": None,
-                                   "metadata": {"candidate_id": candidate_id, "reference": reference}}
+                                   "metadata": {**metadata, "reference": reference}}
         return dict(self.intents[intent_id])
 
     def pay(self, intent_id, wallet="apple_pay", amount=None):
@@ -272,7 +282,7 @@ def test_vipps_aborted(monkeypatch):
 def test_vipps_webhook_signature(monkeypatch):
     monkeypatch.setattr(settings, "vipps_webhook_secret", "webhook-secret")
     synced = []
-    monkeypatch.setattr(plans, "sync_vipps", lambda cid, request, background: synced.append(cid))
+    monkeypatch.setattr(plans, "sync_vipps", lambda payer, request, background: synced.append(payer))
     _, ref = new_candidate("10.1.0.8")
     candidate = repo.get(KIND, ref["candidateId"])
     repo.put(KIND, ref["candidateId"], {**candidate, "plan": "pro", "payment": {
@@ -288,7 +298,7 @@ def test_vipps_webhook_signature(monkeypatch):
     bad = {**good, "authorization": good["authorization"][:-4] + "AAA="}
     assert client.post("/api/shop/vipps/webhook", content=body, headers=bad).status_code == 401
     assert client.post("/api/shop/vipps/webhook", content=body, headers=good).status_code == 200
-    assert synced == [ref["candidateId"]]
+    assert synced == [(KIND, ref["candidateId"])]
 
 
 def test_unconfigured_payment_methods_are_disabled(monkeypatch):
@@ -313,7 +323,7 @@ def test_stripe_http_requests(monkeypatch):
         return httpx.Response(200, json={"id": "pi_1", "client_secret": "s", "status": "requires_payment_method"})
     monkeypatch.setattr(httpx, "request", fake_request)
 
-    stripe_api.create_payment_intent("norsk-ref", 32000, "NOK", "cand1", "Norsk Audio – Pro")
+    stripe_api.create_payment_intent("norsk-ref", 32000, "NOK", {"candidate_id": "cand1"}, "Norsk Audio – Pro")
     method, url, data, _, sent_headers = calls[0]
     assert (method, url) == ("POST", "https://api.stripe.com/v1/payment_intents")
     assert data == {"amount": 32000, "currency": "nok", "payment_method_types[]": "card",
@@ -326,3 +336,111 @@ def test_stripe_http_requests(monkeypatch):
     assert calls[1][:4] == ("GET", "https://api.stripe.com/v1/payment_intents/pi_1", None, {"expand[]": "latest_charge"})
     with pytest.raises(PaymentError, match="No such payment_intent"):
         stripe_api.get_payment_intent("pi_bad")
+
+
+# --- Upgrade: a Basic user changes to Pro ---
+
+def basic_user(*other_groups):
+    """A user in the Basic group (and in `other_groups`); returns (user, auth headers)."""
+    user, auth = make_user()
+    for gid in (plans.plan_group_id("basic"), *other_groups):
+        repo.put("memberships", membership_key(gid, user["id"]),
+                 {"group_id": gid, "user_id": user["id"], "role": "viewer", "enabled": True, "quota": {}})
+    return user, auth
+
+
+def upgrade_ref(auth):
+    """The {userId, token} of the link POST /api/me/upgrade-link gives the app."""
+    r = client.post("/api/me/upgrade-link", headers=auth)
+    assert r.status_code == 200
+    url = urllib.parse.urlsplit(r.json()["url"])
+    assert url.geturl().startswith("https://norsk.example.com/app/upgrade/?u=")
+    query = urllib.parse.parse_qs(url.query)
+    return {"userId": query["u"][0], "token": query["t"][0]}
+
+
+def test_upgrade_link_only_for_basic_users():
+    plain, plain_auth = make_user()  # in no privilege-0 group
+    assert client.post("/api/me/upgrade-link", headers=plain_auth).status_code == 409
+    _, admin_auth = make_user(system_admin=True)
+    assert client.post("/api/me/upgrade-link", headers=admin_auth).status_code == 409
+    assert client.post("/api/me/upgrade-link").status_code == 401
+
+    user, auth = basic_user()
+    ref = upgrade_ref(auth)
+    assert ref["userId"] == user["id"]
+    state = client.get("/api/plan/state", params={"u": ref["userId"], "t": ref["token"]}).json()
+    assert state["upgrade"] and state["upgradable"] and not state["paid"] and state["email"] == user["email"]
+    # The token belongs to this user only, and expires.
+    bad = [{"u": plain["id"], "t": ref["token"]}, {"u": user["id"], "t": "123.abc"},
+           {"u": user["id"], "t": plans.upgrade_token(user["id"], expires=int(time.time()) - 1)},
+           {"u": user["id"], "c": "x", "t": ref["token"]}]
+    for params in bad:
+        assert client.get("/api/plan/state", params=params).status_code == 403
+    # A user can't choose a sign-up plan.
+    assert client.post("/api/plan", json={**ref, "plan": "pro"}).status_code == 403
+    for path in ("/app/upgrade/", "/app/plan/pro-info.js", "/app/terms_of_sale", "/app/privacy_policy", "/app/norsk-audio"):
+        assert client.get(path).status_code == 200
+
+
+def test_pro_info_shows_the_advanced_limits():
+    advanced = repo.get("groups", plans.plan_group_id("pro"))
+    repo.put("groups", advanced["id"], {**advanced, "chatPerDayKb": 750})
+    try:
+        info = client.get("/api/plan/pro-info").json()
+        assert info["prices"] == PRO_PRICES
+        assert info["limits"]["chatPerDayKb"] == 750 and info["limits"]["expirationDays"] == advanced["expirationDays"]
+    finally:
+        repo.put("groups", advanced["id"], advanced)
+
+
+def test_upgrade_with_stripe_moves_the_user_to_advanced(fake_stripe, monkeypatch):
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test")
+    other = {"id": "othergroup", "name": "Other", "privilege": 7}
+    repo.put("groups", other["id"], other)
+    user, auth = basic_user(other["id"])
+    users_before = len(repo.list("users"))
+    ref = upgrade_ref(auth)
+    assert client.get("/api/shop/config", params={"u": ref["userId"], "t": ref["token"]}).json()["stripe"]["enabled"]
+    assert client.post("/api/shop/stripe/start", json={**ref, "currency": "NOK"}).json() == {"clientSecret": "pi_1_secret_x"}
+    assert fake_stripe.intents["pi_1"]["metadata"]["user_id"] == user["id"]
+    fake_stripe.pay("pi_1", "google_pay")
+    # The webhook (metadata.user_id) completes it; the page's status call then sees it paid.
+    body = json.dumps({"type": "payment_intent.succeeded", "data": {"object": {
+        "id": "pi_1", "metadata": {"user_id": user["id"]}}}}).encode()
+    r = client.post("/api/shop/stripe/webhook", content=body,
+                    headers={"stripe-signature": stripe_signature(body, "whsec_test", int(time.time()))})
+    assert r.status_code == 200
+    state = client.post("/api/shop/stripe/status", json=ref).json()
+    assert state["paid"] and not state["upgradable"]
+
+    assert len(repo.list("users")) == users_before  # the same user, no new account
+    upgraded = repo.get("users", user["id"])
+    assert upgraded["plan"] == "pro" and upgraded["payment"]["method"] == "googlepay"
+    assert upgraded["password_hash"] == user["password_hash"]
+    assert repo.get("memberships", membership_key(plans.plan_group_id("basic"), user["id"])) is None
+    assert repo.get("memberships", membership_key(plans.plan_group_id("pro"), user["id"]))["role"] == "viewer"
+    assert repo.get("memberships", membership_key(other["id"], user["id"]))  # other groups are kept
+    # Now Pro: no more upgrade link or payment.
+    assert client.post("/api/me/upgrade-link", headers=auth).status_code == 409
+    assert client.post("/api/shop/stripe/start", json={**ref, "currency": "NOK"}).status_code == 409
+    repo.delete("groups", other["id"])
+
+
+def test_upgrade_with_vipps(monkeypatch):
+    calls = []
+    monkeypatch.setattr(vipps, "configured", lambda: True)
+    monkeypatch.setattr(vipps, "create_payment", lambda ref, amount, cur, url, text:
+                        calls.append(url) or "https://vipps.example/pay")
+    monkeypatch.setattr(vipps, "get_payment", lambda ref: {"state": "AUTHORIZED", "pspReference": "psp-9",
+                                                           "aggregate": {"capturedAmount": {"value": 0}}})
+    monkeypatch.setattr(vipps, "capture", lambda ref, amount, cur: calls.append("capture"))
+    user, auth = basic_user()
+    ref = upgrade_ref(auth)
+    assert client.post("/api/shop/vipps/start", json={**ref, "currency": "EUR"}).status_code == 200
+    assert calls[0].startswith(f"https://norsk.example.com/app/shop/?u={user['id']}&t=") and calls[0].endswith("&vipps=1")
+    state = client.post("/api/shop/vipps/status", json=ref).json()
+    assert state["paid"] and calls[1] == "capture"
+    assert repo.get("users", user["id"])["payment"]["transaction_id"] == "psp-9"
+    assert repo.get("memberships", membership_key(plans.plan_group_id("pro"), user["id"]))
+    assert repo.get("memberships", membership_key(plans.plan_group_id("basic"), user["id"])) is None

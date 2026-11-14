@@ -33,7 +33,7 @@ account; deliberately indistinguishable).
 
 | Method | Path | Who | Body → Response |
 |---|---|---|---|
-| GET | `/signup` | anyone (no login) | → HTML sign-up form (`app/static/signup.html`); calls `/api/checksum`, then `/api/signup`. Opened by the app's "Not registered? Sign up" link |
+| GET | `/app/signup` | anyone (no login) | → HTML sign-up form (`app/static/signup.html`); calls `/api/checksum`, then `/api/signup`. Opened by the app's "Not registered? Sign up" link |
 | POST | `/api/captcha` | anyone (no login) | → `{challenge, difficulty, token}` for the "I am not a robot" button (see below) |
 | POST | `/api/checksum` | anyone (no login) | `{email, password, info?}` (same rules as signup) → `{checksum}` |
 | POST | `/api/signup` | anyone (no login) | `{email, password (10–200 chars), info? (≤2000 chars), checksum, captchaToken, captchaSolution, website?}` → `201 {id, status: "pending"}`. `400 Invalid checksum` if it differs from the recalculated one, `400 Robot check failed` (see below), `409` if the email is a user or already pending, `422` invalid email, `429` when `candidate_users` already holds `LIMIT_SAME_API` (50) records from this IP, or `LIMIT_IP_PER_DAY` (5) from this IP created on the same UTC date |
@@ -41,7 +41,9 @@ account; deliberately indistinguishable).
 | POST | `/api/admin/candidates/{cid}/approve` | sysadmin | `{groupId?, role? ("viewer")}` → public user. Copies the candidate (with its password hash) to `users`, with `groupId` also adds the membership, and **removes** the candidate. `404` if not found, `409` if email taken |
 | POST | `/api/admin/candidates/{cid}/reject` | sysadmin | → the candidate with `status: "rejected"`; it is **removed**. `404` if not found |
 
-`/api/signup` also returns `planToken`; the form then opens `/plan/?c=<id>&t=<planToken>`.
+`/api/signup` also returns `planToken`; the form then opens `/app/plan/?c=<id>&t=<planToken>`.
+The shop calls take either `{candidateId, token}` (a sign-up) or `{userId, token}` (a Basic user
+upgrading with the token from `/api/me/upgrade-link`).
 `/api/admin/candidates` includes `email_verified`, `plan`, `payment` and `default_group_id`
 (the "Basic" group, which the approval dialog suggests).
 
@@ -52,10 +54,15 @@ Groups **Basic** and **Advanced** are created at startup. See [payments.md](paym
 
 | Method | Path | Who | Body / result |
 |---|---|---|---|
-| GET | `/plan/`, `/shop/`, `/verify/` | anyone | HTML pages (`app/static/`). Without the slash: relative redirect |
-| GET | `/api/plan/state?c=&t=` | plan token | → `{email, plan, paid, payment, emailVerified, approved, prices}` |
+| GET | `/app/plan/`, `/app/shop/`, `/app/verify/`, `/app/upgrade/` | anyone | HTML pages (`app/static/`). Without the slash: relative redirect |
+| GET | `/app/terms_of_sale`, `/app/privacy_policy` | anyone | Terms of sale and privacy policy (`app/static/`) |
+| GET | `/app/norsk-audio` | anyone | Norsk Audio's features, with links to sign-up, the web app and the legal pages; linked from the main Movna Hatka site |
+| GET | `/app/plan/pro-info.js` | anyone | Script that shows what Pro gives (used by `/app/plan/` and `/app/upgrade/`) |
+| GET | `/api/plan/pro-info` | anyone | → `{prices, limits: {anonymous, family, subgroupLimitPerYear, chatPerDayKb, expirationDays}, aiMonthlyMinutes}` of the "Advanced" group |
+| POST | `/api/me/upgrade-link` | logged in | → `{url}`: `<PUBLIC_BASE_URL>upgrade/?u=<user id>&t=<upgrade token>` (valid 1 day). `409` unless the user is in a privilege-0 group (system admins never) |
+| GET | `/api/plan/state?c=&t=` or `?u=&t=` | plan or upgrade token | → `{email, plan, paid, payment, emailVerified, approved, upgrade, upgradable, prices}` |
 | POST | `/api/plan` | plan token | `{candidateId, token, plan: "basic"\|"pro"}` → `{next: "done"\|"shop", ...state}`. Basic emails the verification link (at most once a minute). `409` once paid / already a user |
-| GET | `/api/shop/config?c=&t=` | plan token | → `{prices, vipps: {enabled, currencies}, stripe: {enabled, publishableKey}}` |
+| GET | `/api/shop/config?c=&t=` or `?u=&t=` | plan or upgrade token | → `{prices, vipps: {enabled, currencies}, stripe: {enabled, publishableKey}}` |
 | POST | `/api/shop/stripe/start` | plan token | `{..., currency}` → `{clientSecret}` of a Stripe PaymentIntent for Apple Pay / Google Pay. An unfinished intent for the same currency is reused. `409` no Pro plan / already paid, `502` Stripe error |
 | POST | `/api/shop/stripe/status` | plan token | → state, after reading the PaymentIntent from Stripe (`succeeded` → paid) |
 | POST | `/api/shop/stripe/webhook` | Stripe (signed) | `payment_intent.*` events; `400` on a bad `Stripe-Signature`. The intent is always re-read from Stripe |

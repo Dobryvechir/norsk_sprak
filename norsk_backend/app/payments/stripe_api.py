@@ -55,7 +55,7 @@ def _request(method: str, path: str, data: dict | None = None, idempotency_key: 
     return response.json()
 
 
-def create_payment_intent(reference: str, amount: int, currency: str, candidate_id: str, description: str) -> dict:
+def create_payment_intent(reference: str, amount: int, currency: str, metadata: dict, description: str) -> dict:
     """A new PaymentIntent for a card wallet payment; returns {"id", "client_secret", "status", ...}.
 
     Apple Pay and Google Pay are both the "card" payment method type at Stripe.
@@ -65,7 +65,7 @@ def create_payment_intent(reference: str, amount: int, currency: str, candidate_
         "currency": currency.lower(),
         "payment_method_types[]": "card",
         "description": description,
-        "metadata[candidate_id]": candidate_id,
+        **{f"metadata[{key}]": value for key, value in metadata.items()},
         "metadata[reference]": reference,
     })
 

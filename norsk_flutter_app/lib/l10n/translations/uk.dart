@@ -27,6 +27,7 @@ const stringsUk = <String, String>{
   'menuBooks': 'Книги',
   'menuChat': 'Чат',
   'menuSettings': 'Налаштування',
+  'menuChangeToPro': 'Перейти на план Pro',
   'menuAdmin': 'Адміністрування',
   'menuLogout': 'Вийти',
   'noGroups': 'Ви ще не є учасником жодної групи.',

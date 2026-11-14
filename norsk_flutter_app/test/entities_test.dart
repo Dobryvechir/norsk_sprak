@@ -44,4 +44,14 @@ void main() {
     expect(old.plan, isNull);
     expect(old.paymentStatus, isNull);
   });
+
+  test('a group with privilege 0 is Basic', () {
+    final basic = StudyGroup.fromJson({'id': 'g1', 'name': 'Basic', 'my_role': 'viewer', 'privilege': 0});
+    expect(basic.privilege, 0);
+    expect(basic.isBasic, isTrue);
+    expect(StudyGroup.fromJson({'id': 'g2', 'name': 'Advanced', 'privilege': 1}).isBasic, isFalse);
+    final old = StudyGroup.fromJson({'id': 'g3', 'name': 'Old'});  // server before the field existed
+    expect(old.privilege, isNull);
+    expect(old.isBasic, isFalse);
+  });
 }

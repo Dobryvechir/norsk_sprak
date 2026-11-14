@@ -1,6 +1,6 @@
 """Self-registration: anyone may ask for an account, a system admin decides.
 
-    GET  /signup                                   - public: HTML form that calls the two APIs below
+    GET  /app/signup                                   - public: HTML form that calls the two APIs below
     POST /api/captcha                              - public: "I am not a robot" proof-of-work challenge
     POST /api/checksum                             - public: checksum the form must send to /api/signup
     POST /api/signup                               - public: store a candidate user
@@ -9,7 +9,7 @@
     POST /api/admin/candidates/{cid}/reject        - sysadmin: refuse the request
 
 Candidates live in the "candidate_users" kind until an admin decides; approving
-or rejecting removes the record. After signing up the page continues to /plan/
+or rejecting removes the record. After signing up the page continues to /app/plan/
 (see routes/plans.py: plan choice, payment and email verification, all stored
 on the candidate record; a paid Pro candidate becomes a user without approval). The password is stored only as an Argon2 hash;
 on approval that hash is copied to the new user, so the person logs in with the
@@ -186,7 +186,7 @@ def verify_captcha(token: str, solution: int, request: Request, now: float | Non
 
 
 def plan_token(cid: str) -> str:
-    """Proof that the caller is the one who signed up as `cid` (used by /plan/ and /shop/)."""
+    """Proof that the caller is the one who signed up as `cid` (used by /app/plan/ and /app/shop/)."""
     return hmac.new(checksum_key(), b"plan:" + cid.encode(), hashlib.sha256).hexdigest()
 
 
@@ -214,7 +214,7 @@ def take_candidate(cid) -> dict:
     return candidate
 
 
-@router.get("/signup", include_in_schema=False)
+@router.get("/app/signup", include_in_schema=False)
 def signup_page():
     """The sign-up form opened from the app's login screen ("Not registered? Sign up")."""
     return FileResponse(SIGNUP_PAGE, media_type="text/html")

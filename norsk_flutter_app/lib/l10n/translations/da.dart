@@ -27,6 +27,7 @@ const stringsDa = <String, String>{
   'menuBooks': 'Bøger',
   'menuChat': 'Chat',
   'menuSettings': 'Indstillinger',
+  'menuChangeToPro': 'Skift til Pro-abonnement',
   'menuAdmin': 'Administration',
   'menuLogout': 'Log ud',
   'noGroups': 'Du er endnu ikke medlem af nogen gruppe.',

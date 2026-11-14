@@ -10,9 +10,13 @@ class StudyGroup {
   final String id, name;
   /// The logged-in user's role in this group (viewer/uploader/admin), when the server reports it.
   final String? myRole;
-  const StudyGroup(this.id, this.name, [this.myRole]);
+  /// The group's privilege level: 0 = "Basic" (its members may change to the Pro plan), 1 = "Advanced".
+  final int? privilege;
+  const StudyGroup(this.id, this.name, [this.myRole, this.privilege]);
   bool get isAdmin => myRole == 'admin';
-  factory StudyGroup.fromJson(Map<String, dynamic> j) => StudyGroup('${j['id']}', '${j['name']}', j['my_role'] as String?);
+  bool get isBasic => privilege == 0;
+  factory StudyGroup.fromJson(Map<String, dynamic> j) =>
+    StudyGroup('${j['id']}', '${j['name']}', j['my_role'] as String?, (j['privilege'] as num?)?.toInt());
 }
 
 /// A person who signed up and waits for a system admin (never includes the password).

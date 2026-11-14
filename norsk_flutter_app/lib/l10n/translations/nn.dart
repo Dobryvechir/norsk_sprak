@@ -27,6 +27,7 @@ const stringsNn = <String, String>{
   'menuBooks': 'Bøker',
   'menuChat': 'Chat',
   'menuSettings': 'Innstillingar',
+  'menuChangeToPro': 'Byt til Pro-abonnement',
   'menuAdmin': 'Administrasjon',
   'menuLogout': 'Logg ut',
   'noGroups': 'Du er ikkje medlem av nokon gruppe enno.',

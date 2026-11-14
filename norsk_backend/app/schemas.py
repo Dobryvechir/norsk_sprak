@@ -60,6 +60,7 @@ class CreateGroupRequest(GroupChatSettings):
     """A new group; chat settings left out get their defaults."""
 
     name: str = Field(min_length=1, max_length=100)
+    privilege: int = 7
 
 
 # --- Chat ---
@@ -141,10 +142,12 @@ class SentenceEditRequest(BaseModel):
 # --- Plan, shop and email verification (routes/plans.py) ---
 
 class CandidateRef(BaseModel):
-    """Which candidate a /plan/ or /shop/ call is for; `token` is the plan token
-    POST /api/signup returned (it proves the caller is the one who signed up)."""
+    """Who a /app/plan/ or /app/shop/ call is for: a candidate (`candidateId`, with the plan token
+    POST /api/signup returned) or a Basic user upgrading to Pro (`userId`, with the token
+    of the link from POST /api/me/upgrade-link). The token proves the caller is that person."""
 
-    candidateId: str = Field(max_length=64)
+    candidateId: str = Field(default="", max_length=64)
+    userId: str = Field(default="", max_length=64)
     token: str = Field(max_length=128)
 
 

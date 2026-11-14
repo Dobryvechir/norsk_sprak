@@ -27,6 +27,7 @@ const stringsSv = <String, String>{
   'menuBooks': 'Böcker',
   'menuChat': 'Chatt',
   'menuSettings': 'Inställningar',
+  'menuChangeToPro': 'Byt till Pro-abonnemang',
   'menuAdmin': 'Administration',
   'menuLogout': 'Logga ut',
   'noGroups': 'Du är inte medlem i någon grupp ännu.',

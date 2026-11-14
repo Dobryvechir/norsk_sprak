@@ -179,7 +179,7 @@ def test_short_browser():
 
 
 def test_signup_page_is_served():
-    r = client.get("/signup")
+    r = client.get("/app/signup")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert all(p in r.text for p in ("api/signup", "api/checksum", "api/captcha"))
 

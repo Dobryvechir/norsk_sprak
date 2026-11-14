@@ -27,6 +27,7 @@ const stringsHe = <String, String>{
   'menuBooks': 'ספרים',
   'menuChat': 'צ׳אט',
   'menuSettings': 'הגדרות',
+  'menuChangeToPro': 'מעבר לתוכנית Pro',
   'menuAdmin': 'ניהול',
   'menuLogout': 'התנתקות',
   'noGroups': 'עדיין אינך חבר באף קבוצה.',

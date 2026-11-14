@@ -27,6 +27,7 @@ const stringsEn = <String, String>{
   'menuBooks': 'Books',
   'menuChat': 'Chat',
   'menuSettings': 'Settings',
+  'menuChangeToPro': 'Change to Pro plan',
   'menuAdmin': 'Admin',
   'menuLogout': 'Log out',
   'noGroups': 'You are not a member of any group yet.',
