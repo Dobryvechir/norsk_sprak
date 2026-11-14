@@ -22,7 +22,7 @@ from .chat import purge_expired
 from .config import settings
 from .migrations import upgrade_recordings
 from .repository import repo
-from .routes import admin, auth, bible, books, chat, dictionaries, groups, recordings
+from .routes import admin, auth, bible, books, chat, dictionaries, groups, plans, recordings, signup
 from .routes.admin import new_user
 from .routes.auth import find_user_by_email
 
@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     # Code before `yield` runs once when the server starts.
     create_bootstrap_admin()
     upgrade_recordings()
+    plans.ensure_plan_groups()  # "Basic" and "Advanced"
     books.seed_sample_books()
     purge_expired(force=True)
     yield
@@ -88,6 +89,8 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(signup.router)
+app.include_router(plans.router)
 app.include_router(groups.router)
 app.include_router(recordings.router)
 app.include_router(books.router)

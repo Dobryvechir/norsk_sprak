@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up – Norsk Audio</title>
+<style>
+  :root { --bg: #f4f5f7; --card: #fff; --text: #1d1f23; --muted: #5f6570; --border: #c9ced6;
+          --accent: #2f5fd0; --accent-text: #fff; --error: #b3261e; --ok: #1e7a3c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121417; --card: #1d2025; --text: #e8eaed; --muted: #a0a6b0; --border: #3a3f47;
+            --accent: #8fb0ff; --accent-text: #0d1b3d; --error: #ffb4ab; --ok: #7fd89a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         padding: 24px 16px; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--border);
+         border-radius: 12px; padding: 28px 24px; }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; text-align: center; }
+  p.lead { margin: 0 0 20px; color: var(--muted); text-align: center; font-size: .95rem; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: .9rem; }
+  input, textarea { width: 100%; padding: 10px 12px; font: inherit; color: inherit; background: transparent;
+                    border: 1px solid var(--border); border-radius: 8px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  textarea { min-height: 96px; resize: vertical; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: 4px; }
+  button { width: 100%; margin-top: 22px; padding: 12px; font: inherit; font-weight: 600; cursor: pointer;
+           color: var(--accent-text); background: var(--accent); border: 0; border-radius: 8px; }
+  button:disabled { opacity: .6; cursor: default; }
+  #message { margin-top: 16px; min-height: 1.5em; text-align: center; }
+  #message.error { color: var(--error); }
+  #message.ok { color: var(--ok); }
+  .robot { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 18px; padding: 12px 14px;
+           font: inherit; font-weight: 500; text-align: left; color: var(--text); background: transparent;
+           border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+  .robot .box { flex: none; width: 24px; height: 24px; border: 2px solid var(--muted); border-radius: 4px;
+                display: grid; place-items: center; font-size: 16px; line-height: 1; }
+  .robot[data-state="working"] .box { border-color: var(--accent); border-top-color: transparent;
+                                      border-radius: 50%; animation: spin .8s linear infinite; }
+  .robot[data-state="done"] { border-color: var(--ok); cursor: default; }
+  .robot[data-state="done"] .box { border-color: var(--ok); color: var(--ok); }
+  .robot[data-state="done"] .box::after { content: "¹3"; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Honeypot: hidden from people (and screen readers); bots that fill every field get rejected. */
+  .trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Norsk Audio</h1>
+  <p class="lead">Ask for an account. An administrator reviews every request.</p>
+  <form id="form" novalidate>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required maxlength="254">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="200">
+    <div class="hint">At least 10 characters.</div>
+
+    <label for="password2">Repeat password</label>
+    <input id="password2" type="password" autocomplete="new-password" required>
+
+    <label for="info">About you</label>
+    <textarea id="info" name="info" maxlength="2000" placeholder="Who you are and why you want access"></textarea>
+
+    <div class="trap" aria-hidden="true">
+      <label for="website">Website</label>
+      <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button id="robot" class="robot" type="button" data-state="idle" aria-pressed="false">
+      <span class="box" aria-hidden="true"></span><span id="robot-label">I am not a robot</span>
+    </button>
+
+    <button id="submit" type="submit">Send request</button>
+    <div id="message" role="status" aria-live="polite"></div>
+  </form>
+</main>
+<script>
+  const form = document.getElementById('form');
+  const message = document.getElementById('message');
+  const button = document.getElementById('submit');
+  function show(text, kind) { message.textContent = text; message.className = kind; }
+  const SYSTEM_ERROR = 'System error, try again';
+  const post = (path, data) => fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data && JSON.stringify(data),
+  });
+
+  // "I am not a robot": fetch a challenge from the server, then find a number whose
+  // SHA-256 with the challenge starts with `difficulty` zero bits (proof of work).
+  const robot = document.getElementById('robot');
+  const robotLabel = document.getElementById('robot-label');
+  let robotProof = null;
+  function leadingZeroBits(bytes) {
+    let bits = 0;
+    for (const b of bytes) { if (b) return bits + Math.clz32(b) - 24; bits += 8; }
+    return bits;
+  }
+  async function solve({ challenge, difficulty }) {
+    const encoder = new TextEncoder();
+    for (let n = 0; ; n++) {
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(`${challenge}:${n}`)));
+      if (leadingZeroBits(digest) >= difficulty) return n;
+    }
+  }
+  robot.addEventListener('click', async (event) => {
+    if (!event.isTrusted || robot.dataset.state !== 'idle') return; // a real click only, once
+    robot.dataset.state = 'working'; robotLabel.textContent = 'Checking…';
+    try {
+      const response = await post('api/captcha');
+      if (!response.ok) throw new Error('captcha');
+      const captcha = await response.json();
+      robotProof = { captchaToken: captcha.token, captchaSolution: await solve(captcha) };
+      robot.dataset.state = 'done'; robot.setAttribute('aria-pressed', 'true');
+      robotLabel.textContent = 'I am not a robot';
+    } catch (e) {
+      robot.dataset.state = 'idle'; robotLabel.textContent = 'I am not a robot';
+      show(SYSTEM_ERROR, 'error');
+    }
+  });
+  function resetRobot() {
+    robotProof = null; robot.dataset.state = 'idle'; robot.setAttribute('aria-pressed', 'false');
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const email = form.email.value.trim();
+    const password = form.password.value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return show('Please enter a valid email address.', 'error');
+    if (password.length < 10) return show('The password must have at least 10 characters.', 'error');
+    if (password !== document.getElementById('password2').value) return show('The passwords do not match.', 'error');
+    if (!robotProof) return show('Please confirm that you are not a robot.', 'error');
+
+    button.disabled = true; show('Sending…', '');
+    try {
+      const fields = { email, password, info: form.info.value.trim() };
+      const checked = await post('api/checksum', fields);
+      if (!checked.ok) throw new Error('checksum');
+      const { checksum } = await checked.json();
+      if (!checksum) throw new Error('checksum');
+
+      const response = await post('api/signup',
+        { ...fields, checksum, ...robotProof, website: form.website.value });
+      if (response.ok) {
+        const { id, planToken } = await response.json();
+        form.reset();
+        form.querySelectorAll('input, textarea, button').forEach((el) => { el.disabled = true; });
+        show('Thank you! Now choose your plan…', 'ok');
+        location.href = `plan/?c=${encodeURIComponent(id)}&t=${encodeURIComponent(planToken)}`;
+        return;
+      }
+      show({ 409: 'This email is already registered or waiting for approval.',
+             429: 'Too many requests from your network.' }[response.status] || SYSTEM_ERROR, 'error');
+      resetRobot(); // a challenge works only once
+      button.disabled = false;
+    } catch (e) {
+      show(SYSTEM_ERROR, 'error');
+      resetRobot();
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

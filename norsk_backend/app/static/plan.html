@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choose plan – Norsk Audio</title>
+<style>
+  :root { --bg: #f4f5f7; --card: #fff; --text: #1d1f23; --muted: #5f6570; --border: #c9ced6;
+          --accent: #2f5fd0; --accent-text: #fff; --error: #b3261e; --ok: #1e7a3c; --chosen: #eef3ff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121417; --card: #1d2025; --text: #e8eaed; --muted: #a0a6b0; --border: #3a3f47;
+            --accent: #8fb0ff; --accent-text: #0d1b3d; --error: #ffb4ab; --ok: #7fd89a; --chosen: #232b3d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         padding: 24px 16px; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--border);
+         border-radius: 12px; padding: 28px 24px; }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; text-align: center; }
+  p.lead { margin: 0 0 20px; color: var(--muted); text-align: center; font-size: .95rem; }
+  fieldset { border: 0; margin: 0; padding: 0; }
+  legend { font-weight: 600; margin-bottom: 8px; }
+  .plan { display: flex; gap: 12px; align-items: flex-start; padding: 14px; margin-top: 10px; cursor: pointer;
+          border: 1px solid var(--border); border-radius: 10px; }
+  .plan:has(input:checked) { border-color: var(--accent); background: var(--chosen); }
+  .plan input { margin-top: 4px; accent-color: var(--accent); width: 18px; height: 18px; }
+  .plan strong { display: block; }
+  .plan span { color: var(--muted); font-size: .9rem; }
+  button { width: 100%; margin-top: 22px; padding: 12px; font: inherit; font-weight: 600; cursor: pointer;
+           color: var(--accent-text); background: var(--accent); border: 0; border-radius: 8px; }
+  button:disabled { opacity: .6; cursor: default; }
+  #message { margin-top: 16px; min-height: 1.5em; text-align: center; }
+  #message.error { color: var(--error); }
+  #message.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Choose plan</h1>
+  <p class="lead" id="lead">One more step to finish your registration.</p>
+  <form id="form">
+    <fieldset>
+      <legend>Plan</legend>
+      <label class="plan"><input type="radio" name="plan" value="basic" checked>
+        <div><strong>Basic</strong><span>Free. An administrator reviews your request.</span></div></label>
+      <label class="plan"><input type="radio" name="plan" value="pro">
+        <div><strong>Pro</strong><span>30 Euro / $32 / 320 NOK. Access to the Advanced group right after payment.</span></div></label>
+    </fieldset>
+    <button id="submit" type="submit">Continue</button>
+    <div id="message" role="status" aria-live="polite"></div>
+  </form>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const ref = { candidateId: params.get('c') || '', token: params.get('t') || '' };
+  const form = document.getElementById('form');
+  const button = document.getElementById('submit');
+  const message = document.getElementById('message');
+  const show = (text, kind) => { message.textContent = text; message.className = kind; };
+  const done = (text) => {
+    form.querySelectorAll('input, button').forEach((el) => { el.disabled = true; });
+    show(text, 'ok');
+  };
+  const THANKS = 'Thank you for registration, check your email.';
+
+  async function load() {
+    const r = await fetch(`../api/plan/state?c=${encodeURIComponent(ref.candidateId)}&t=${encodeURIComponent(ref.token)}`);
+    if (!r.ok) { done(''); return show(r.status === 403 ? 'This link is not valid.' : 'Registration not found.', 'error'); }
+    const s = await r.json();
+    document.getElementById('lead').textContent = `Registering ${s.email}`;
+    if (s.plan) form.plan.value = s.plan;
+    if (s.paid || s.approved) done(s.paid ? 'Your Pro plan is paid. ' + THANKS : 'Your registration is complete.');
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    button.disabled = true; show('Saving…', '');
+    try {
+      const r = await fetch('../api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                             body: JSON.stringify({ ...ref, plan: form.plan.value }) });
+      if (!r.ok) throw new Error(String(r.status));
+      const result = await r.json();
+      if (result.next === 'shop') {
+        location.href = `../shop/?c=${encodeURIComponent(ref.candidateId)}&t=${encodeURIComponent(ref.token)}`;
+        return;
+      }
+      done(THANKS);
+    } catch (e) {
+      show(e.message === '409' ? 'Your registration is already complete.' : 'System error, try again', 'error');
+      button.disabled = false;
+    }
+  });
+  load().catch(() => show('System error, try again', 'error'));
+</script>
+</body>
+</html>

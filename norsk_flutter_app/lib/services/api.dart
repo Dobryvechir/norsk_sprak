@@ -150,6 +150,14 @@ class Api {
     final response = await post('/api/admin/users', data: {'email': email, 'password': password});
     return AppUser.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
+  Future<List<SignupCandidate>> signupCandidates() async => [for (final e in (await get('/api/admin/candidates')).data as List)
+    SignupCandidate.fromJson(Map<String, dynamic>.from(e as Map))];
+  /// Creates the user from the candidate; with [groupId] also adds them to that group as [role].
+  Future<AppUser> approveCandidate(String id, {String? groupId, String role = 'viewer'}) async {
+    final response = await post('/api/admin/candidates/$id/approve', data: {'groupId': groupId, 'role': role});
+    return AppUser.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+  Future<void> rejectCandidate(String id) async { await post('/api/admin/candidates/$id/reject'); }
   Future<void> createGroup(String name) async { await post('/api/admin/groups', data: {'name': name}); }
   Future<void> addMember(String groupId, String userId, String role) async { await put('/api/groups/$groupId/members/$userId', {'role': role, 'enabled': true, 'quota': <String, dynamic>{}}); }
   /// Creates a recording in [groupId] from an audio file spoken in [language].

@@ -29,4 +29,19 @@ void main() {
     expect(r.timedSentences('en'), isEmpty);
     expect(r.timedSentences('de'), isEmpty);
   });
+
+  test('signup candidate: verification, plan, payment and suggested group', () {
+    final c = SignupCandidate.fromJson({'id': 'c1', 'email': 'a@b.no', 'status': 'pending',
+      'created_at': '2026-11-14T10:00:00+00:00', 'email_verified': true, 'plan': 'pro',
+      'payment': {'status': 'failed', 'method': 'vipps'}, 'default_group_id': 'g-basic'});
+    expect(c.emailVerified, isTrue);
+    expect(c.plan, 'pro');
+    expect(c.paymentStatus, 'failed');
+    expect(c.paymentMethod, 'vipps');
+    expect(c.defaultGroupId, 'g-basic');
+    final old = SignupCandidate.fromJson({'id': 'c2', 'email': 'x@y.no', 'status': 'pending'});
+    expect(old.emailVerified, isFalse);
+    expect(old.plan, isNull);
+    expect(old.paymentStatus, isNull);
+  });
 }

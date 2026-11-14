@@ -21,6 +21,42 @@ users ──< memberships >── groups ──< recordings ──1:1── usag
 }
 ```
 
+## `candidate_users`  (key: candidate id)
+
+People who signed up via `POST /api/signup` and wait for a system admin. Approving
+or rejecting removes the record. At most `LIMIT_SAME_API` (50) records may share an IP, and at most
+`LIMIT_IP_PER_DAY` (5) of them may be created on the same UTC date.
+
+```json
+{
+  "id": "5e0c...",
+  "email": "ola@example.no",           // lower-case
+  "password_hash": "$argon2id$...",    // copied to the user on approval
+  "info": "I am in Anne's class",
+  "ip": "203.0.113.7",
+  "browser": "Chrome 131 / Windows",   // short form of the User-Agent
+  "created_at": "2026-11-14T10:00:00+00:00",
+  "status": "pending",                 // always "pending" (decided records are removed)
+  // Added by /plan/, /shop/ and /verify/ (routes/plans.py):
+  "plan": "basic",                     // "basic" | "pro"; missing until chosen
+  "payment": {                         // only for "pro"
+    "status": "failed",                // "processing" | "paid" | "failed"
+    "method": "vipps",                 // "vipps" | "applepay" | "googlepay" | "card"; "stripe" until known
+    "provider": "vipps",               // "vipps" | "stripe"
+    "currency": "NOK", "amount": 32000, // minor units
+    "reference": "norsk-...", "intent_id": "pi_...",  // intent_id: Stripe only
+    "transaction_id": "...", "paid_at": "...", "error": "..."
+  },
+  "email_verified": false, "email_verified_at": "...",
+  "verify_token_hash": "...",          // SHA-256 of the emailed token; never sent to clients
+  "verify_sent_at": 1763114400.0       // link valid 7 days
+}
+```
+
+A paid Pro candidate is not kept here: it becomes a user at once (member of the
+"Advanced" group). Approval and payment copy `plan`, `payment` and the
+verification fields to the user, plus `candidate_id`.
+
 ## `groups`  (key: group id)
 
 ```json
@@ -172,8 +208,9 @@ Written by the worker after each successful transcription of one language's audi
 
 ```
 data/
-  metadata/users/*.json  groups/  memberships/  recordings/  usage/  books/  sections/  chapters/
+  metadata/users/*.json  candidate_users/  groups/  memberships/  recordings/  usage/  books/  sections/  chapters/
   audio/<group_id>/<recording_id>_<lang>_<random>.<ext>   (local audio backend)
+  key/key.txt                             (secret for signup checksums; created automatically)
   cache/                                  (Drive downloads)
   temp/                                   (uploads in progress)
 ```

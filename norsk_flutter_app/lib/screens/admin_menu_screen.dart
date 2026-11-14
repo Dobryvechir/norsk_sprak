@@ -3,6 +3,7 @@ import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
 import 'admin_screen.dart';
+import 'signup_requests_screen.dart';
 /// Everything admin-related: creating groups and users (system admin) and
 /// managing the members of each group the user administers.
 class AdminMenuScreen extends StatefulWidget {
@@ -46,6 +47,8 @@ class _AdminMenuScreenState extends State<AdminMenuScreen> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.icon(onPressed: createGroup, icon: const Icon(Icons.group_add), label: Text(context.tr('createGroup'))),
             OutlinedButton.icon(onPressed: createUser, icon: const Icon(Icons.person_add_alt), label: Text(context.tr('createUser'))),
+            OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SignupRequestsScreen(api: widget.api))),
+              icon: const Icon(Icons.how_to_reg), label: Text(context.tr('signupRequests'))),
           ]),
           const SizedBox(height: 16),
         ],

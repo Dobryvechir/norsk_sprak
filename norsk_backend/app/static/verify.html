@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify email – Norsk Audio</title>
+<style>
+  :root { --bg: #f4f5f7; --card: #fff; --text: #1d1f23; --muted: #5f6570; --border: #c9ced6;
+          --accent: #2f5fd0; --accent-text: #fff; --error: #b3261e; --ok: #1e7a3c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121417; --card: #1d2025; --text: #e8eaed; --muted: #a0a6b0; --border: #3a3f47;
+            --accent: #8fb0ff; --accent-text: #0d1b3d; --error: #ffb4ab; --ok: #7fd89a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         padding: 24px 16px; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--border);
+         border-radius: 12px; padding: 28px 24px; text-align: center; }
+  h1 { margin: 0 0 12px; font-size: 1.5rem; }
+  button { width: 100%; margin-top: 16px; padding: 12px; font: inherit; font-weight: 600; cursor: pointer;
+           color: var(--accent-text); background: var(--accent); border: 0; border-radius: 8px; }
+  #message.error { color: var(--error); }
+  #message.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Verify email</h1>
+  <!-- A button press (not page load) confirms, so mail scanners that open links don't verify by accident. -->
+  <button id="confirm" type="button">Confirm my email address</button>
+  <p id="message" role="status" aria-live="polite"></p>
+</main>
+<script>
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const button = document.getElementById('confirm');
+  const message = document.getElementById('message');
+  const show = (text, kind) => { message.textContent = text; message.className = kind; };
+  if (!token) { button.hidden = true; show('This link is not valid.', 'error'); }
+  button.addEventListener('click', async () => {
+    button.disabled = true; show('Checking…', '');
+    try {
+      const r = await fetch('../api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               body: JSON.stringify({ token }) });
+      if (r.ok) {
+        const result = await r.json();
+        button.hidden = true;
+        return show(`Thank you! ${result.email} is verified. ` + (result.approved
+          ? 'You can sign in in the app.' : 'You can sign in in the app once an administrator approves your request.'), 'ok');
+      }
+      show({ 404: 'This link is not valid or was already used.', 410: 'This link has expired.' }[r.status]
+           || 'System error, try again', 'error');
+      button.disabled = r.status < 500; // only a server error is worth retrying
+    } catch (e) {
+      show('System error, try again', 'error'); button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

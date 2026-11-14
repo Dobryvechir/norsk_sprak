@@ -29,6 +29,60 @@ account; deliberately indistinguishable).
 | POST | `/api/admin/users` | sysadmin | `{email, password (≥10 chars)}` → public user. `409` if email taken |
 | POST | `/api/admin/groups` | sysadmin | `{name (1–100 chars), anonymous?, family?, subgroupLimitPerYear?, chatPerDayKb?, expirationDays?}` → group with default AI config and chat settings (see chat.md) |
 
+## Self-registration (`routes/signup.py`)
+
+| Method | Path | Who | Body → Response |
+|---|---|---|---|
+| GET | `/signup` | anyone (no login) | → HTML sign-up form (`app/static/signup.html`); calls `/api/checksum`, then `/api/signup`. Opened by the app's "Not registered? Sign up" link |
+| POST | `/api/captcha` | anyone (no login) | → `{challenge, difficulty, token}` for the "I am not a robot" button (see below) |
+| POST | `/api/checksum` | anyone (no login) | `{email, password, info?}` (same rules as signup) → `{checksum}` |
+| POST | `/api/signup` | anyone (no login) | `{email, password (10–200 chars), info? (≤2000 chars), checksum, captchaToken, captchaSolution, website?}` → `201 {id, status: "pending"}`. `400 Invalid checksum` if it differs from the recalculated one, `400 Robot check failed` (see below), `409` if the email is a user or already pending, `422` invalid email, `429` when `candidate_users` already holds `LIMIT_SAME_API` (50) records from this IP, or `LIMIT_IP_PER_DAY` (5) from this IP created on the same UTC date |
+| GET | `/api/admin/candidates` | sysadmin | → candidates waiting for a decision, newest first, without the password hash |
+| POST | `/api/admin/candidates/{cid}/approve` | sysadmin | `{groupId?, role? ("viewer")}` → public user. Copies the candidate (with its password hash) to `users`, with `groupId` also adds the membership, and **removes** the candidate. `404` if not found, `409` if email taken |
+| POST | `/api/admin/candidates/{cid}/reject` | sysadmin | → the candidate with `status: "rejected"`; it is **removed**. `404` if not found |
+
+`/api/signup` also returns `planToken`; the form then opens `/plan/?c=<id>&t=<planToken>`.
+`/api/admin/candidates` includes `email_verified`, `plan`, `payment` and `default_group_id`
+(the "Basic" group, which the approval dialog suggests).
+
+## Plan, shop and email verification (`routes/plans.py`)
+
+`c` / `candidateId` is the candidate id and `t` / `token` the plan token; a wrong token gives `403`.
+Groups **Basic** and **Advanced** are created at startup. See [payments.md](payments.md).
+
+| Method | Path | Who | Body / result |
+|---|---|---|---|
+| GET | `/plan/`, `/shop/`, `/verify/` | anyone | HTML pages (`app/static/`). Without the slash: relative redirect |
+| GET | `/api/plan/state?c=&t=` | plan token | → `{email, plan, paid, payment, emailVerified, approved, prices}` |
+| POST | `/api/plan` | plan token | `{candidateId, token, plan: "basic"\|"pro"}` → `{next: "done"\|"shop", ...state}`. Basic emails the verification link (at most once a minute). `409` once paid / already a user |
+| GET | `/api/shop/config?c=&t=` | plan token | → `{prices, vipps: {enabled, currencies}, stripe: {enabled, publishableKey}}` |
+| POST | `/api/shop/stripe/start` | plan token | `{..., currency}` → `{clientSecret}` of a Stripe PaymentIntent for Apple Pay / Google Pay. An unfinished intent for the same currency is reused. `409` no Pro plan / already paid, `502` Stripe error |
+| POST | `/api/shop/stripe/status` | plan token | → state, after reading the PaymentIntent from Stripe (`succeeded` → paid) |
+| POST | `/api/shop/stripe/webhook` | Stripe (signed) | `payment_intent.*` events; `400` on a bad `Stripe-Signature`. The intent is always re-read from Stripe |
+| POST | `/api/shop/vipps/start` | plan token | `{..., currency: "NOK"\|"EUR"}` → `{redirectUrl}` |
+| POST | `/api/shop/vipps/status` | plan token | → state, after asking Vipps (captures when `AUTHORIZED`) |
+| POST | `/api/shop/vipps/webhook` | Vipps (HMAC) | `401` on a bad signature; the state is always re-read from Vipps |
+| POST | `/api/verify` | anyone | `{token}` → `{email, emailVerified: true, approved}`. `404` unknown/used, `410` older than 7 days |
+
+When a payment succeeds the candidate becomes a user at once (role `viewer` in **Advanced**,
+no admin approval) and gets the verification email.
+
+The checksum is HMAC-SHA256 over `{email (lower-case), password, info (trimmed), ip, browser}`,
+keyed with `<DATA_DIR>/key/key.txt` (created with a random 256-bit key on first use).
+Since IP and browser are included, the checksum and the signup must come from the same
+IP and browser. The form shows "System error, try again" when either step fails.
+
+**"I am not a robot"** (proof of work). Pressing the button calls `/api/captcha` and
+searches for `captchaSolution` such that `SHA-256("<challenge>:<solution>")` starts with
+`difficulty` (16) zero bits, about 65 000 hashes. `/api/signup` answers `400 Robot check failed`
+unless the token is genuinely signed (with the same key file), was issued to the same IP
+and browser at least `CAPTCHA_MIN_SECONDS` (3 s) and at most `CAPTCHA_MAX_SECONDS` (15 min)
+ago, has not been used before, the solution is correct, and the hidden honeypot field
+`website` is empty. Used challenges are remembered in memory (one API process).
+
+The IP is the direct peer, or `X-Real-IP` / the last `X-Forwarded-For` entry
+when the peer is a loopback/private address (i.e. the reverse proxy).
+
 ## Group management (`routes/groups.py`)
 
 | Method | Path | Who | Body → Response |

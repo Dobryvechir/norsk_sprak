@@ -15,6 +15,34 @@ class StudyGroup {
   factory StudyGroup.fromJson(Map<String, dynamic> j) => StudyGroup('${j['id']}', '${j['name']}', j['my_role'] as String?);
 }
 
+/// A person who signed up and waits for a system admin (never includes the password).
+class SignupCandidate {
+  final String id, email, info, ip, browser, status;
+  final DateTime? createdAt;
+  /// The created user's id, once approved.
+  final String? userId;
+  /// Whether the person opened the link in the verification email.
+  final bool emailVerified;
+  /// "basic", "pro" or null (no plan chosen yet).
+  final String? plan;
+  /// Pro payment: "processing", "paid", "failed" or null; and how ("vipps", "googlepay", "applepay").
+  final String? paymentStatus, paymentMethod;
+  /// The group the approval dialog suggests (the "Basic" group for people who did not pay).
+  final String? defaultGroupId;
+  const SignupCandidate(this.id, this.email, this.info, this.ip, this.browser, this.status, this.createdAt, this.userId,
+      {this.emailVerified = false, this.plan, this.paymentStatus, this.paymentMethod, this.defaultGroupId});
+  bool get isPending => status == 'pending';
+  factory SignupCandidate.fromJson(Map<String, dynamic> j) {
+    final payment = j['payment'] is Map ? j['payment'] as Map : const {};
+    return SignupCandidate('${j['id']}', '${j['email']}',
+      '${j['info'] ?? ''}', '${j['ip'] ?? ''}', '${j['browser'] ?? ''}', '${j['status']}',
+      DateTime.tryParse('${j['created_at']}')?.toLocal(), j['user_id'] as String?,
+      emailVerified: j['email_verified'] == true, plan: j['plan'] as String?,
+      paymentStatus: payment['status'] as String?, paymentMethod: payment['method'] as String?,
+      defaultGroupId: j['default_group_id'] as String?);
+  }
+}
+
 /// One sentence of one language's audio, with its timing in that audio (what SentencePlayer plays).
 class Sentence {
   final int index, startMs, endMs;

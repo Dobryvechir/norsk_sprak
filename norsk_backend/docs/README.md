@@ -9,6 +9,7 @@ Read these in order if you're new to the code:
 5. [transcription.md](transcription.md): how audio becomes timed Norwegian sentences
 6. [chat.md](chat.md): chat groups, subgroups, Drive links, limits, expiry and family location
 7. [configuration.md](configuration.md): every `.env` setting
-8. [known-issues.md](known-issues.md): bugs and limitations found during the refactor
+8. [payments.md](payments.md): plans, the shop (Vipps direct; Apple Pay and Google Pay through Stripe) and email verification
+9. [known-issues.md](known-issues.md): bugs and limitations found during the refactor
 
 Setup and running instructions are in the main [README](../README.md).

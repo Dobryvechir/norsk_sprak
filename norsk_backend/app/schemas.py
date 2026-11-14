@@ -20,6 +20,31 @@ class CreateUserRequest(BaseModel):
     password: str = Field(min_length=10)
 
 
+class SignupFields(BaseModel):
+    """The sign-up form's fields (body of POST /api/checksum)."""
+
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=10, max_length=200)
+    info: str = Field(default="", max_length=2000)  # who they are / why they want access
+
+
+class SignupRequest(SignupFields):
+    """A request for an account; a system admin approves or rejects it.
+    `checksum` is what POST /api/checksum returned for the same fields."""
+
+    checksum: str = Field(max_length=128)
+    captchaToken: str = Field(max_length=1000)    # from POST /api/captcha
+    captchaSolution: int = Field(ge=0, le=2**53)  # the proof-of-work answer
+    website: str = Field(default="", max_length=200)  # honeypot: must stay empty
+
+
+class ApproveCandidateRequest(BaseModel):
+    """Optionally put the approved user straight into a group."""
+
+    groupId: str | None = None
+    role: str = "viewer"  # "viewer", "uploader" or "admin"
+
+
 class GroupChatSettings(BaseModel):
     """A group's chat settings (see chat.GROUP_CHAT_DEFAULTS). In a PATCH, fields
     left out (null) keep their current value."""
@@ -111,3 +136,25 @@ class SentenceEditRequest(BaseModel):
     text: str | None = Field(default=None, min_length=1)
     start_ms: int | None = Field(default=None, ge=0)
     end_ms: int | None = Field(default=None, gt=0)
+
+
+# --- Plan, shop and email verification (routes/plans.py) ---
+
+class CandidateRef(BaseModel):
+    """Which candidate a /plan/ or /shop/ call is for; `token` is the plan token
+    POST /api/signup returned (it proves the caller is the one who signed up)."""
+
+    candidateId: str = Field(max_length=64)
+    token: str = Field(max_length=128)
+
+
+class ChoosePlanRequest(CandidateRef):
+    plan: Literal["basic", "pro"]
+
+
+class StartPaymentRequest(CandidateRef):
+    currency: Literal["EUR", "USD", "NOK"]
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
