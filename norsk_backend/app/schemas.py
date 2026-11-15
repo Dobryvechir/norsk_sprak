@@ -124,10 +124,41 @@ class MemberRequest(BaseModel):
 class AIConfigRequest(BaseModel):
     """Per-group transcription settings."""
 
+    enabled: bool = True  # false: members may not have recordings transcribed by AI
     provider: str = "openai"
     model: str = "whisper-1"
     # Total audio minutes the whole group may upload per month; null = unlimited.
     monthly_audio_minutes_limit: int | None = None
+
+
+MAX_SENTENCES = 10000
+
+
+class RecordingMediaRequest(BaseModel):
+    """One language's audio: a file the user saved through Media on their own
+    Google Drive (shared with anyone with the link), and where its texts and
+    timings come from.
+
+    mode "ai":     transcribed by the server (if the group allows and quotas permit).
+    mode "manual": `start_ms` (and optionally `end_ms`) for every sentence of the
+                   audio, and `sentences` (language code -> texts, same length);
+                   the audio's own language must be among them. A missing end
+                   is the next sentence's start, or the end of the audio.
+    """
+
+    drive_id: str = Field(min_length=1, max_length=200)
+    media_kind: Literal["audio", "video"] = "audio"
+    mime_type: str | None = Field(default=None, max_length=100)
+    file_name: str | None = Field(default=None, max_length=300)
+    mode: Literal["ai", "manual"]
+    sentences: dict[str, list[str]] | None = None
+    start_ms: list[int] | None = Field(default=None, max_length=MAX_SENTENCES)
+    end_ms: list[int | None] | None = Field(default=None, max_length=MAX_SENTENCES)
+
+
+class NewRecordingRequest(RecordingMediaRequest):
+    name: str = Field(min_length=1, max_length=200)
+    language: str  # the language spoken in the media
 
 
 class SentenceEditRequest(BaseModel):

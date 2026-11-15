@@ -9,11 +9,13 @@ import 'api.dart';
 /// language. The upload time makes a replaced audio get a new name, so a stale copy is never played.
 /// The real extension is kept because iOS (AVPlayer) picks the decoder for local files from it.
 class AudioCache {
-  static const _extensions = {'mp3','m4a','wav','ogg','opus','mp4','aac','flac'};
+  static const _extensions = {'mp3','m4a','wav','ogg','opus','mp4','aac','flac','mov','webm'};
   static const _mimeExtensions = {
     'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a',
     'video/mp4': 'mp4', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/ogg': 'ogg',
     'audio/opus': 'opus', 'audio/aac': 'aac', 'audio/x-aac': 'aac', 'audio/flac': 'flac', 'audio/x-flac': 'flac',
+    // A recording's audio may be a video (or a browser recording) saved through Media.
+    'video/quicktime': 'mov', 'video/webm': 'webm', 'audio/webm': 'webm',
   };
   final Api api;
   AudioCache(this.api);

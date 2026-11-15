@@ -193,3 +193,24 @@ class Membership {
   factory Membership.fromJson(Map<String, dynamic> j) => Membership('${j['user_id']}', '${j['group_id']}',
     '${j['role']}', j['enabled'] != false, Map<String, dynamic>.from((j['quota'] as Map?) ?? {}));
 }
+
+/// An audio or video file the user saved through Media on their own Google Drive, used as a
+/// recording's audio. [kind] is "audio" or "video".
+class RecordingMedia {
+  final String driveId, name, kind;
+  final String? mimeType;
+  const RecordingMedia(this.driveId, this.name, this.kind, [this.mimeType]);
+}
+
+/// Whether the user may have a recording transcribed by AI in a group now ([reason] says why not:
+/// "disabled", "recordings", "minutes" or "group_minutes"), and what is left this month (null = no limit).
+class AiAllowance {
+  final bool enabled;
+  final String? reason;
+  final int? remainingRecordings, maxDurationMinutes;
+  final double? remainingMinutes;
+  const AiAllowance(this.enabled, {this.reason, this.remainingRecordings, this.remainingMinutes, this.maxDurationMinutes});
+  factory AiAllowance.fromJson(Map<String, dynamic> j) => AiAllowance(j['enabled'] == true, reason: j['reason'] as String?,
+    remainingRecordings: (j['remaining_recordings'] as num?)?.toInt(), remainingMinutes: (j['remaining_minutes'] as num?)?.toDouble(),
+    maxDurationMinutes: (j['max_duration_minutes'] as num?)?.toInt());
+}

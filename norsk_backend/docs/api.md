@@ -111,7 +111,7 @@ numbers (`0.1.0+1` = `0.1`). How the app shows a notification (by `severity`) is
 |---|---|---|---|
 | GET | `/api/groups/{gid}/members` | admin | → list of memberships |
 | PUT | `/api/groups/{gid}/members/{user_id}` | admin | `{role?, enabled?, quota?}` → membership. Creates or **replaces** |
-| PATCH | `/api/groups/{gid}/ai-config` | admin | `{provider?, model?, monthly_audio_minutes_limit?}` → new AI config |
+| PATCH | `/api/groups/{gid}/ai-config` | admin | `{enabled?, provider?, model?, monthly_audio_minutes_limit?}` → new AI config. `enabled: false` turns AI transcription off for the group |
 | GET | `/api/groups/{gid}/usage` | admin | → list of usage records |
 | GET | `/api/groups/{gid}/settings` | member | → chat settings `{anonymous, family, subgroupLimitPerYear, chatPerDayKb, expirationDays}` |
 | PATCH | `/api/groups/{gid}/settings` | admin | any of those fields → new chat settings (fields left out are kept) |
@@ -126,13 +126,14 @@ Notes:
 
 | Method | Path | Who | Body → Response |
 |---|---|---|---|
-| POST | `/api/groups/{gid}/recordings` | uploader | multipart form: `name`, `language`, `file` → `202 {id, language, status: "pending"}` |
-| PUT | `/api/recordings/{rid}/audio/{lang}` | uploader | multipart form: `file` → `202 {id, language, status: "pending"}`. Adds audio in `lang`, or replaces it |
+| GET | `/api/groups/{gid}/ai-allowance` | uploader | → `{enabled, reason, remaining_recordings, remaining_minutes, max_duration_minutes}`: whether the user may use AI transcription now (`reason`: `disabled`, `recordings`, `minutes`, `group_minutes`; `null` values = unlimited) |
+| POST | `/api/groups/{gid}/recordings` | uploader | JSON: `name`, `language` + the media fields below → `202 {id, language, status}` (`"pending"` for AI, `"ready"` for manual) |
+| PUT | `/api/recordings/{rid}/audio/{lang}` | uploader | JSON: the media fields below → `202 {id, language, status}`. Adds audio in `lang`, or replaces it; with manual texts, the languages in `sentences` are replaced |
 | GET | `/api/groups/{gid}/recordings` | member | → list of recordings |
 | GET | `/api/recordings/{rid}` | member | → one recording with its `audio` and `sentences` maps |
-| GET | `/api/recordings/{rid}/audio/{lang}` | member | → the audio file in `lang` |
+| GET | `/api/recordings/{rid}/audio/{lang}` | member | → the audio (or video) file in `lang`; a Drive file is passed through, honouring `Range` |
 | PATCH | `/api/recordings/{rid}/sentences/{lang}/{index}` | uploader | `{text?, start_ms?, end_ms?}` → `{index, language, text, start_ms, end_ms}` |
-| DELETE | `/api/recordings/{rid}` | admin | → `{deleted: true}`. Deletes the audio in every language. Works even if a file is already missing |
+| DELETE | `/api/recordings/{rid}` | admin | → `{deleted: true}`. Deletes audio kept in our storage (never the user's Drive files). Works even if a file is already missing |
 | POST | `/api/recordings/{rid}/transcribe/{lang}` | uploader | → `202 {status: "pending", id, language}`. Only if that audio is pending/failed, else 409 |
 
 `language` / `lang` is one of `en nb uk ru de da sv cs bg pl pt es fr el he it`
@@ -140,9 +141,28 @@ Notes:
 only has entries for the languages that were uploaded or written; see
 data-model.md for its shape.
 
-Upload errors: `422 Invalid name` (blank or >200 chars) · `413 File too large` ·
-`422 Unsupported or invalid audio file` · `422 Invalid duration` (>90 min) ·
-`403 … quota exceeded` / `Recording too long` (see permissions-and-quotas.md).
+Audio is never uploaded. The app sends a file the user saved through Media on
+their own Google Drive (`/media/audio` or `/media/videos`), after sharing it with
+anyone who has the link. Media fields:
+
+| Field | |
+|---|---|
+| `drive_id` | the Drive file ID (required) |
+| `media_kind` | `"audio"` (default) or `"video"` |
+| `mime_type`, `file_name` | optional, as Drive reports them |
+| `mode` | `"ai"`: transcribed by the worker (group must allow it, quotas apply) · `"manual"`: the user's own texts and timings |
+| `start_ms` | manual: start of every sentence in the media, ascending |
+| `end_ms` | manual, optional: same length; a `null` (or missing list) is the next start, or the end of the media |
+| `sentences` | manual: `{language code: [text per sentence]}`, each list as long as `start_ms`; must include `language`. `no` is read as `nb` |
+
+The app reads the manual texts from JSON (`[{"nb": "Hei.", "en": "Hi.", "timeMs": 0, "endMs": 900}, …]`),
+SRT or WebVTT files (`lib/services/recording_texts.dart`) and sends them in this form.
+
+Errors: `422 Invalid name` · `422 Invalid Google Drive file ID` · `422 Could not
+read the media file on Google Drive…` (not shared, or not audio/video) ·
+`422 Invalid duration` (>90 min) · `422` for texts that don't fit the media ·
+AI only: `403 AI transcription is not enabled…` / `… quota exceeded` /
+`Recording too long` (see permissions-and-quotas.md).
 
 Sentence edit: `text` sets the sentence in `lang`, for any language, which is
 how translations are added (the list is padded with `""` up to `index`).
@@ -201,7 +221,8 @@ TOKEN=$(curl -s -X POST localhost:8000/api/auth/login \
 curl -s localhost:8000/api/me/groups -H "Authorization: Bearer $TOKEN"
 
 curl -s -X POST localhost:8000/api/groups/<gid>/recordings \
-  -H "Authorization: Bearer $TOKEN" -F name="Lesson 1" -F language=nb -F file=@lesson1.mp3
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Lesson 1","language":"nb","drive_id":"<shared Drive file id>","mode":"ai"}'
 ```
 
 ## Verse audio from Google Drive (`routes/bible.py`)

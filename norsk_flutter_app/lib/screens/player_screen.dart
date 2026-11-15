@@ -5,7 +5,7 @@ import '../services/api.dart';
 import '../services/audio_cache.dart';
 import '../services/sentence_player.dart';
 import '../services/settings.dart';
-import 'upload_screen.dart';
+import 'recording_media_screen.dart';
 /// Plays one language's audio of a recording sentence by sentence, showing the texts in the chosen text languages.
 /// (Book chapters have their own player: ChapterPlayerScreen.)
 class PlayerScreen extends StatefulWidget {
@@ -100,7 +100,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     catch (e) { showError(e); }
   }
   Future<void> addAudio() async {
-    final added = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api, group: widget.group, recording: recording)));
+    final added = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => RecordingMediaScreen(api: widget.api, group: widget.group, recording: recording)));
     if (added == true) await load();
   }
   @override Widget build(BuildContext context) {

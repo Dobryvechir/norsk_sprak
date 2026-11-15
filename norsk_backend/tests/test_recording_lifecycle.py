@@ -1,9 +1,11 @@
-"""Regression tests for recordings: upload, languages, editing, deleting, and the worker."""
+"""Regression tests for recordings: media on Google Drive, languages, editing, deleting, and the worker."""
 
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
+from app import drive_media as drive_media_module
 from app import worker
 from app.config import settings
 from app.helpers import new_id, utc_now_iso
@@ -125,34 +127,124 @@ def test_worker_startup_requeues_interrupted_audio():
     assert repo.get("recordings", done["id"])["audio"]["nb"]["status"] == "ready"
 
 
-def test_upload_and_add_audio_in_another_language(monkeypatch):
-    monkeypatch.setattr(recordings, "get_duration", lambda path: 3.0)
+DRIVE_ID = "1AbCdEfGhIjKlMnOp_qrstuv"
+
+
+def drive_media(monkeypatch, seconds=3.0):
+    """Pretend every Drive file is shared and `seconds` long, and serve b"media" for it."""
+    monkeypatch.setattr(recordings, "media_duration", lambda drive_id: seconds)
+
+    def handler(request):
+        assert request.url.params["id"] == DRIVE_ID
+        return httpx.Response(200, stream=httpx.ByteStream(b"media"), headers={"content-type": "audio/mp4"})
+
+    monkeypatch.setattr(drive_media_module, "http_client",
+                        lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_create_from_drive_with_ai_then_add_language_with_own_texts(monkeypatch):
+    drive_media(monkeypatch)
     headers = make_admin_headers()
     group = make_group()
 
-    response = client.post(f"/api/groups/{group['id']}/recordings", headers=headers,
-                           data={"name": "Leksjon 1", "language": "nb"},
-                           files={"file": ("leksjon.mp3", b"fake", "audio/mpeg")})
+    response = client.post(f"/api/groups/{group['id']}/recordings", headers=headers, json={
+        "name": "Leksjon 1", "language": "nb", "drive_id": DRIVE_ID, "media_kind": "video", "mode": "ai"})
     assert response.status_code == 202
+    assert response.json()["status"] == "pending"
     rid = response.json()["id"]
 
-    response = client.put(f"/api/recordings/{rid}/audio/en", headers=headers,
-                          files={"file": ("lesson.mp3", b"fake", "audio/mpeg")})
+    response = client.put(f"/api/recordings/{rid}/audio/en", headers=headers, json={
+        "drive_id": DRIVE_ID, "mode": "manual", "start_ms": [0, 1500], "end_ms": [1400, None],
+        "sentences": {"en": ["Hi.", "Good day."], "no": ["Hei.", "God dag."]}})
     assert response.status_code == 202
+    assert response.json()["status"] == "ready"
 
     body = client.get(f"/api/recordings/{rid}", headers=headers).json()
     assert set(body["audio"]) == {"nb", "en"}
-    assert body["audio"]["en"]["status"] == "pending"
-    assert all("audio_key" not in entry for entry in body["audio"].values())
-    assert client.get(f"/api/recordings/{rid}/audio/en", headers=headers).status_code == 200
+    assert body["audio"]["nb"]["timing"] == "ai" and body["audio"]["nb"]["media_kind"] == "video"
+    assert body["audio"]["en"]["start_ms"] == [0, 1500]
+    assert body["audio"]["en"]["end_ms"] == [1400, 3000]  # a missing end: the end of the media
+    assert body["sentences"] == {"en": ["Hi.", "Good day."], "nb": ["Hei.", "God dag."]}
+    response = client.get(f"/api/recordings/{rid}/audio/en", headers=headers)
+    assert response.status_code == 200 and response.content == b"media"
     assert client.get(f"/api/recordings/{rid}/audio/de", headers=headers).status_code == 404
 
+    # Deleting leaves the user's Drive file alone (nothing in our storage to delete).
+    assert client.delete(f"/api/recordings/{rid}", headers=headers).status_code == 200
 
-def test_upload_rejects_unknown_language():
+
+def test_manual_texts_are_checked(monkeypatch):
+    drive_media(monkeypatch)
+    headers = make_admin_headers()
+    url = f"/api/groups/{make_group()['id']}/recordings"
+    base = {"name": "X", "language": "nb", "drive_id": DRIVE_ID, "mode": "manual"}
+
+    def post(**fields):
+        return client.post(url, headers=headers, json={**base, **fields})
+
+    assert post(start_ms=[0], sentences={"en": ["Hi."]}).status_code == 422          # no Norwegian text
+    assert post(start_ms=[0, 1000], sentences={"nb": ["Hei."]}).status_code == 422   # counts differ
+    assert post(start_ms=[1000, 0], sentences={"nb": ["A", "B"]}).status_code == 422  # not ascending
+    assert post(start_ms=[0], end_ms=[9000], sentences={"nb": ["A"]}).status_code == 422  # past the end
+    assert post(start_ms=[0], sentences={"xx": ["A"], "nb": ["A"]}).status_code == 422
+    assert post(start_ms=[0, 1000], sentences={"nb": ["A", "B"]}).status_code == 202
+
+
+def test_ai_needs_the_group_allowance_and_quota(monkeypatch):
+    drive_media(monkeypatch, seconds=120.0)
+    headers = make_admin_headers()
+    group = make_group()
+    body = {"name": "X", "language": "nb", "drive_id": DRIVE_ID, "mode": "ai"}
+    url = f"/api/groups/{group['id']}/recordings"
+
+    group["ai"]["monthly_audio_minutes_limit"] = 3
+    repo.put("groups", group["id"], group)
+    allowance = client.get(f"/api/groups/{group['id']}/ai-allowance", headers=headers).json()
+    assert allowance["enabled"] is True and allowance["remaining_minutes"] == 3
+    assert client.post(url, headers=headers, json=body).status_code == 202
+    response = client.post(url, headers=headers, json=body)  # 2 + 2 minutes > 3
+    assert response.status_code == 403 and response.json()["detail"] == "Group AI quota exceeded"
+
+    # Own texts don't use AI, so they don't count and aren't limited.
+    manual = {**body, "mode": "manual", "start_ms": [0], "sentences": {"nb": ["Hei."]}}
+    assert client.post(url, headers=headers, json=manual).status_code == 202
+
+    group["ai"]["enabled"] = False
+    repo.put("groups", group["id"], group)
+    allowance = client.get(f"/api/groups/{group['id']}/ai-allowance", headers=headers).json()
+    assert allowance == {**allowance, "enabled": False, "reason": "disabled"}
+    assert client.post(url, headers=headers, json=body).status_code == 403
+
+
+def test_worker_transcribes_audio_from_drive(monkeypatch):
+    drive_media(monkeypatch)
+    group = make_group()
+    recording_id = new_id()
+    entry = {**make_audio_entry(group["id"], recording_id, "nb", with_audio_file=False), "drive_id": DRIVE_ID}
+    del entry["audio_key"]
+    repo.put("recordings", recording_id, {"id": recording_id, "group_id": group["id"], "name": "D",
+                                          "uploader_id": "someone", "created_at": utc_now_iso(),
+                                          "audio": {"nb": entry}, "sentences": {}})
+    seen = []
+
+    def fake_transcribe(path, provider, model, language):
+        seen.append(Path(path).read_bytes())
+        return [{"index": 0, "text": "Hei.", "start_ms": 0, "end_ms": 400}]
+
+    monkeypatch.setattr(worker, "transcribe", fake_transcribe)
+    while worker.run_once():
+        pass
+
+    assert b"media" in seen
+    saved = repo.get("recordings", recording_id)
+    assert saved["audio"]["nb"]["status"] == "ready" and saved["sentences"] == {"nb": ["Hei."]}
+
+
+def test_create_rejects_unknown_language(monkeypatch):
+    drive_media(monkeypatch)
     group = make_group()
     response = client.post(f"/api/groups/{group['id']}/recordings", headers=make_admin_headers(),
-                           data={"name": "X", "language": "xx"},
-                           files={"file": ("x.mp3", b"fake", "audio/mpeg")})
+                           json={"name": "X", "language": "xx", "drive_id": DRIVE_ID, "mode": "ai"})
     assert response.status_code == 422
 
 

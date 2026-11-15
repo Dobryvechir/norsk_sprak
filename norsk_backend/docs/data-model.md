@@ -83,7 +83,8 @@ field except `id`, `text` and `severity` may be `null` (= no limit).
 {
   "id": "3aa0cbcf8a8b43129dd1761c29b6e38e",
   "name": "Norskkurs A2",
-  "ai": {"provider": "openai", "model": "whisper-1", "monthly_audio_minutes_limit": null},
+  "ai": {"enabled": true,            // missing = true; false: no AI transcription in this group
+         "provider": "openai", "model": "whisper-1", "monthly_audio_minutes_limit": null},
   "created_at": "2026-10-16T12:00:00+00:00",
   "privilege": 7,                // int; plan groups: "Basic" 0, "Advanced" 1; others 7 by default
   "anonymous": false,            // chat settings; missing ones count as these defaults
@@ -122,8 +123,11 @@ field except `id`, `text` and `severity` may be `null` (= no limit).
   "created_at": "2026-10-16T12:00:00+00:00",
   "audio": {                           // language code → that language's audio
     "nb": {
-      "audio_key": "3aa0…/<id>_nb_1a2b3c4d.mp3",  // where it is stored; hidden from clients
-      "status": "ready",               // pending | processing | ready | failed
+      "drive_id": "1AbC…",             // the file on the uploader's Google Drive (shared by link)
+      "media_kind": "video",           // audio | video
+      "mime_type": "video/mp4", "file_name": "Lesson 1",
+      "timing": "ai",                  // ai (transcribed by us; counts for quotas) | manual (user's own file)
+      "status": "ready",               // pending | processing | ready | failed (manual: always ready)
       "error": null,                   // error message when status is "failed"
       "duration_seconds": 1834.2,
       "uploader_id": "…",              // who uploaded this language's audio
@@ -146,7 +150,11 @@ Transcribing a language's audio replaces `sentences[lang]` and that audio's
 timings. A language may have sentences without audio (a translation typed in
 via the edit endpoint). Language codes are listed in `helpers.LANGUAGES`.
 
-With Google Drive storage, `audio_key` is the Drive file ID instead of a path.
+Recordings made before audio moved to the users' own Drive have `"audio_key"`
+(our storage; hidden from clients) instead of `drive_id`, and no `timing`
+(counted as `ai`). With Google Drive storage (`AUDIO_BACKEND`), `audio_key` is
+the Drive file ID in the server's folder instead of a path. `drive_id` files are
+never deleted by us.
 
 Recordings saved in the older single-language format (top-level `audio_key`,
 `status`, `sentences` as a list of objects) are converted at startup by

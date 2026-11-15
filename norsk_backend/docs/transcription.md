@@ -15,7 +15,8 @@ forever:
     none?  → sleep 3 s, try again
     set its status "processing"
     try:
-        audio path ← storage.get(audio_key)
+        audio path ← a temporary download of drive_id (deleted afterwards),
+                     or storage.get(audio_key) for older audio
         sentences  ← transcribe(audio path, language)
         sentences[lang] ← their texts; audio start_ms/end_ms ← their timings
         status "ready", save a usage record
@@ -25,7 +26,7 @@ forever:
 
 Results are saved by `save_result`, which re-reads the recording and changes
 only that language's audio entry and sentences, and only if the audio is still
-the same (same `audio_key`). So deleting the recording, replacing that audio,
+the same (same `audio_key`, `drive_id` and `created_at`). So deleting the recording, replacing that audio,
 or editing other languages during a transcription is not undone by the worker.
 
 It handles one audio at a time. Run exactly **one** worker. Two workers could

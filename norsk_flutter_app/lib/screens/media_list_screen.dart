@@ -7,10 +7,13 @@ import 'media_view_screen.dart';
 
 /// The saved media of one [kind], 10 per page: the names and icons come from
 /// `/media/<kind.iconFolder>` on Google Drive. Each item can be viewed or deleted; with [picking] a tap
-/// instead closes the screen with the media file itself (a [DriveFile]), for Chat.
+/// instead closes the screen with the media file itself (a [DriveFile]), for Chat (or, with [pickLabel] and
+/// [pickIcon] for the button, for a recording).
 class MediaListScreen extends StatefulWidget {
   final GoogleDrive drive; final MediaKind kind; final bool picking;
-  const MediaListScreen({super.key, required this.drive, required this.kind, this.picking = false});
+  final String pickLabel; final IconData pickIcon;
+  const MediaListScreen({super.key, required this.drive, required this.kind, this.picking = false,
+    this.pickLabel = 'chatSend', this.pickIcon = Icons.send});
   @override State<MediaListScreen> createState() => _MediaListScreenState();
 }
 
@@ -102,7 +105,7 @@ class _MediaListScreenState extends State<MediaListScreen> {
         Expanded(child: files.isEmpty ? Center(child: Text(context.tr('mediaEmpty'))) : Center(child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640), child: ListView.builder(padding: const EdgeInsets.all(12), itemCount: files.length,
             itemBuilder: (_, i) => _MediaTile(file: files[i], kind: kind, icon: icon(files[i]),
-              picking: widget.picking, onView: () => widget.picking ? pick(files[i]) : view(files[i]),
+              picking: widget.picking, pickLabel: widget.pickLabel, pickIcon: widget.pickIcon, onView: () => widget.picking ? pick(files[i]) : view(files[i]),
               onDelete: () => delete(files[i])))))),
         if (page > 0 || hasNext) SafeArea(top: false, child: Padding(padding: const EdgeInsets.only(bottom: 8),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -117,8 +120,10 @@ class _MediaListScreenState extends State<MediaListScreen> {
 
 class _MediaTile extends StatelessWidget {
   final DriveFile file; final MediaKind kind; final Future<Uint8List> icon; final bool picking;
+  final String pickLabel; final IconData pickIcon;
   final VoidCallback onView, onDelete;
-  const _MediaTile({required this.file, required this.kind, required this.icon, required this.onView, required this.onDelete, this.picking = false});
+  const _MediaTile({required this.file, required this.kind, required this.icon, required this.onView, required this.onDelete,
+    this.picking = false, this.pickLabel = 'chatSend', this.pickIcon = Icons.send});
   @override Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final placeholder = ColoredBox(color: theme.colorScheme.primaryContainer, child: Icon(kind.icon, color: theme.colorScheme.onPrimaryContainer));
@@ -129,7 +134,7 @@ class _MediaTile extends StatelessWidget {
           : Image.memory(snap.data!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder)))),
       const SizedBox(width: 12),
       Expanded(child: Text(file.name, style: theme.textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis)),
-      if (picking) IconButton(tooltip: context.tr('chatSend'), onPressed: onView, icon: const Icon(Icons.send))
+      if (picking) IconButton(tooltip: context.tr(pickLabel), onPressed: onView, icon: Icon(pickIcon))
       else ...[
         IconButton(tooltip: context.tr(kind == MediaKind.audio ? 'listen' : 'view'), onPressed: onView,
           icon: Icon(kind == MediaKind.picture ? Icons.visibility : Icons.play_circle_outline)),

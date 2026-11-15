@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
+import 'recording_texts.dart';
 import '../version.dart';
 
 class Api {
@@ -177,18 +177,22 @@ class Api {
   Future<void> deleteNotification(String id) async { await delete('/api/admin/notifications/$id'); }
   Future<void> createGroup(String name) async { await post('/api/admin/groups', data: {'name': name}); }
   Future<void> addMember(String groupId, String userId, String role) async { await put('/api/groups/$groupId/members/$userId', {'role': role, 'enabled': true, 'quota': <String, dynamic>{}}); }
-  /// Creates a recording in [groupId] from an audio file spoken in [language].
-  Future<void> upload(String groupId, String name, String language, String path, void Function(double) onProgress) =>
-    _sendAudio('post', '/api/groups/$groupId/recordings', {'name': name, 'language': language}, path, onProgress);
-  /// Adds the audio in [language] to an existing recording, or replaces it.
-  Future<void> uploadAudio(String recordingId, String language, String path, void Function(double) onProgress) =>
-    _sendAudio('put', '/api/recordings/$recordingId/audio/$language', {}, path, onProgress);
-  Future<void> _sendAudio(String method, String path, Map<String, dynamic> fields, String filePath, void Function(double) onProgress) async {
-    final filename = filePath.split(Platform.pathSeparator).last;
-    final form = FormData.fromMap({...fields, 'file': await MultipartFile.fromFile(filePath, filename: filename)});
-    await dio.request(url(path), data: form, options: authOptions().copyWith(method: method.toUpperCase()),
-      onSendProgress: (sent, total) { if (total > 0) onProgress(sent / total); });
+  /// Whether the user may have a recording transcribed by AI in [groupId] now, and what is left.
+  Future<AiAllowance> aiAllowance(String groupId) async =>
+    AiAllowance.fromJson(Map<String, dynamic>.from((await get('/api/groups/$groupId/ai-allowance')).data as Map));
+  /// Creates a recording in [groupId] from [media] (on the user's Google Drive, shared with anyone with
+  /// the link) spoken in [language]: with [texts] those are its sentences, else it is transcribed by AI.
+  Future<void> createRecording(String groupId, String name, String language, RecordingMedia media, RecordingTexts? texts) async {
+    await post('/api/groups/$groupId/recordings', data: {'name': name, 'language': language, ..._mediaFields(media, texts)});
   }
+  /// Adds the audio in [language] to an existing recording, or replaces it (see [createRecording]).
+  Future<void> setRecordingAudio(String recordingId, String language, RecordingMedia media, RecordingTexts? texts) async {
+    await put('/api/recordings/$recordingId/audio/$language', _mediaFields(media, texts));
+  }
+  Map<String, dynamic> _mediaFields(RecordingMedia media, RecordingTexts? texts) => {
+    'drive_id': media.driveId, 'media_kind': media.kind, 'mime_type': media.mimeType, 'file_name': media.name,
+    'mode': texts == null ? 'ai' : 'manual', ...?texts?.toJson(),
+  };
   String _audioUrl(Recording r, String language) => url('/api/${r.isChapter ? 'chapters' : 'recordings'}/${r.id}/audio/$language');
   /// The audio's own `url` (resolved against the server if relative), or null if it has none
   /// and is served from the server's storage.

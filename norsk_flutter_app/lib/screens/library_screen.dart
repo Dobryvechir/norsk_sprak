@@ -3,7 +3,7 @@ import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../services/api.dart';
 import 'player_screen.dart';
-import 'upload_screen.dart';
+import 'recording_media_screen.dart';
 class LibraryScreen extends StatefulWidget {
   final Api api; final StudyGroup group;
   const LibraryScreen({super.key, required this.api, required this.group});
@@ -14,13 +14,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override void initState() { super.initState(); refresh(); }
   void refresh() => setState(() { future = widget.api.recordings(widget.group.id); });
   Future<void> upload() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => UploadScreen(api: widget.api, group: widget.group)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => RecordingMediaScreen(api: widget.api, group: widget.group)));
     refresh();
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.group.name), actions: [
       IconButton(tooltip: context.tr('refresh'), onPressed: refresh, icon: const Icon(Icons.refresh))]),
-    floatingActionButton: FloatingActionButton.extended(onPressed: upload, icon: const Icon(Icons.upload_file), label: Text(context.tr('upload'))),
+    floatingActionButton: FloatingActionButton.extended(onPressed: upload, icon: const Icon(Icons.add), label: Text(context.tr('newRecording'))),
     body: FutureBuilder<List<Recording>>(future: future, builder: (ctx, snap) {
       if (!snap.hasData) return Center(child: snap.hasError ? Text(readableError(snap.error!)) : const CircularProgressIndicator());
       final items = [...snap.data!]..sort((a,b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));

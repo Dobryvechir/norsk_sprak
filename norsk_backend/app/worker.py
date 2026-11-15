@@ -17,6 +17,7 @@ A failed audio can be queued again with POST /api/recordings/{id}/transcribe/{la
 
 import time
 
+from .drive_media import download_to_temp
 from .helpers import utc_now_iso
 from .migrations import upgrade_recordings
 from .repository import repo
@@ -44,18 +45,24 @@ def recover_interrupted_jobs() -> int:
     return count
 
 
-def save_result(recording_id, lang, audio_key, changes, sentences=None) -> bool:
+def audio_identity(entry) -> tuple:
+    """What tells one audio from its replacement: a replaced audio has a new
+    audio_key, or a new drive_id or created_at."""
+    return entry.get("audio_key"), entry.get("drive_id"), entry.get("created_at")
+
+
+def save_result(recording_id, lang, identity, changes, sentences=None) -> bool:
     """Apply the worker's results to the current copy of the recording.
 
     Transcription takes long, and meanwhile the recording may have been
-    deleted, the audio replaced (new audio_key), or other languages edited.
+    deleted, the audio replaced (see audio_identity), or other languages edited.
     So only this language's audio entry (and sentences) are changed, and only
     if it is still the same audio. Returns False if it is gone.
     """
     with repo.lock:
         recording = repo.get("recordings", recording_id)
         entry = recording and recording["audio"].get(lang)
-        if not entry or entry["audio_key"] != audio_key:
+        if not entry or audio_identity(entry) != identity:
             return False
         entry.update(changes)
         if sentences is not None:
@@ -83,18 +90,23 @@ def run_once() -> bool:
     if recording is None:
         return False
     entry = recording["audio"][lang]
-    audio_key = entry["audio_key"]
+    identity = audio_identity(entry)
 
     # Mark it straight away so the app shows it is being worked on.
-    if not save_result(recording["id"], lang, audio_key, {"status": "processing"}):
+    if not save_result(recording["id"], lang, identity, {"status": "processing"}):
         return True  # deleted or replaced since we listed it
 
+    temp_path = None
     try:
         ai = repo.get("groups", recording["group_id"])["ai"]
-        audio_path = get_storage().get(audio_key)
+        if entry.get("drive_id"):
+            # On the uploader's Google Drive: a temporary copy, deleted below.
+            temp_path = audio_path = download_to_temp(entry["drive_id"])
+        else:
+            audio_path = get_storage().get(entry["audio_key"])
         sentences = transcribe(audio_path, ai["provider"], ai["model"], language=lang)
 
-        save_result(recording["id"], lang, audio_key, {
+        save_result(recording["id"], lang, identity, {
             "status": "ready",
             "error": None,
             "start_ms": [s["start_ms"] for s in sentences],
@@ -117,7 +129,10 @@ def run_once() -> bool:
         })
     except Exception as e:
         # Keep stored error messages short.
-        save_result(recording["id"], lang, audio_key, {"status": "failed", "error": str(e)[:500]})
+        save_result(recording["id"], lang, identity, {"status": "failed", "error": str(e)[:500]})
+    finally:
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
 
     return True
 

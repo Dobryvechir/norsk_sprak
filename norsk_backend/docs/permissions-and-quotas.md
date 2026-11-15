@@ -33,13 +33,20 @@ For a system admin, `get_membership` returns a made-up membership
 
 ## Quotas (`quotas.py`)
 
-Checked on every upload. All limits are per calendar month (UTC). Missing or
-`null` means unlimited. Every uploaded audio file counts, so a recording with audio
-in two languages counts as two uploads. Audio whose transcription `"failed"`
-doesn't count, so a failed transcription gives the quota back.
+Only AI transcription is limited: audio whose texts and timings the user provides
+(`"timing": "manual"`) never counts and is never refused for quota. A group admin
+can turn AI off for the whole group with `ai.enabled: false`
+(`PATCH /api/groups/{gid}/ai-config`). The app asks
+`GET /api/groups/{gid}/ai-allowance` to show whether AI can be chosen.
+
+All limits are per calendar month (UTC). Missing or `null` means unlimited. Every
+AI-transcribed audio counts, so a recording with AI audio in two languages counts
+as two. Audio whose transcription `"failed"` doesn't count, so a failed
+transcription gives the quota back.
 
 | Where it's set | Field | Rejects the upload when… | Error |
 |---|---|---|---|
+| group `ai` | `enabled: false` | always | `AI transcription is not enabled for this group` |
 | membership `quota` | `max_recordings_per_month` | user already has this many this month | `Monthly recording quota exceeded` |
 | membership `quota` | `max_audio_minutes_per_month` | user's minutes this month + new file > limit | `Monthly audio quota exceeded` |
 | membership `quota` | `max_recording_duration_minutes` | the new file alone is longer | `Recording too long` |
@@ -51,4 +58,4 @@ Example membership body:
 {"role": "uploader", "quota": {"max_recordings_per_month": 20, "max_audio_minutes_per_month": 600}}
 ```
 
-Independently of quotas, every upload must be ≤ `MAX_UPLOAD_MB` and ≤ 90 minutes.
+Independently of quotas, every media file must be ≤ 90 minutes.
