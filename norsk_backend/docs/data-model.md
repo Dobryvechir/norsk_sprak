@@ -87,6 +87,7 @@ field except `id`, `text` and `severity` may be `null` (= no limit).
          "provider": "openai", "model": "whisper-1", "monthly_audio_minutes_limit": null},
   "created_at": "2026-10-16T12:00:00+00:00",
   "privilege": 7,                // int; plan groups: "Basic" 0, "Advanced" 1; others 7 by default
+  "shareRecords": 100,           // recordings with own texts each member may share per month; "Basic" 0 (none)
   "anonymous": false,            // chat settings; missing ones count as these defaults
   "family": false,
   "subgroupLimitPerYear": 20,
@@ -119,13 +120,16 @@ field except `id`, `text` and `severity` may be `null` (= no limit).
   "id": "…",
   "group_id": "…",
   "name": "Lesson 1",
-  "uploader_id": "…",                  // who created the recording
+  "uploader_id": "…",                  // who created the recording (its author)
   "created_at": "2026-10-16T12:00:00+00:00",
+  "source": "ai",                      // file (shared with own texts; counts for shareRecords) | ai; older: missing
   "audio": {                           // language code → that language's audio
     "nb": {
       "drive_id": "1AbC…",             // the file on the uploader's Google Drive (shared by link)
       "media_kind": "video",           // audio | video
       "mime_type": "video/mp4", "file_name": "Lesson 1",
+      "size_bytes": 52428800,          // the media file's size, when known
+      "translate_to": ["en", "uk"],    // ai: languages the worker translates the sentences into
       "timing": "ai",                  // ai (transcribed by us; counts for quotas) | manual (user's own file)
       "status": "ready",               // pending | processing | ready | failed (manual: always ready)
       "error": null,                   // error message when status is "failed"

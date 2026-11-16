@@ -61,6 +61,9 @@ class CreateGroupRequest(GroupChatSettings):
 
     name: str = Field(min_length=1, max_length=100)
     privilege: int = 7
+    # Recordings with their own texts each member may share per month (0 = none).
+    # Left out: 0 for privilege 0 ("Basic"), else 100 (see quotas.share_limit).
+    shareRecords: int | None = Field(default=None, ge=0, le=100000)
 
 
 # --- Chat ---
@@ -150,6 +153,7 @@ class RecordingMediaRequest(BaseModel):
     media_kind: Literal["audio", "video"] = "audio"
     mime_type: str | None = Field(default=None, max_length=100)
     file_name: str | None = Field(default=None, max_length=300)
+    size_bytes: int | None = Field(default=None, ge=0)  # of the media file, for the app's lists
     mode: Literal["ai", "manual"]
     sentences: dict[str, list[str]] | None = None
     start_ms: list[int] | None = Field(default=None, max_length=MAX_SENTENCES)
@@ -159,6 +163,8 @@ class RecordingMediaRequest(BaseModel):
 class NewRecordingRequest(RecordingMediaRequest):
     name: str = Field(min_length=1, max_length=200)
     language: str  # the language spoken in the media
+    # Mode "ai": languages to translate the transcribed sentences into.
+    translations: list[str] = Field(default_factory=list, max_length=20)
 
 
 class SentenceEditRequest(BaseModel):

@@ -13,8 +13,9 @@ can create users and groups.
 | Can… | viewer | uploader | admin |
 |---|:-:|:-:|:-:|
 | See the group, list/read recordings, play audio | ✅ | ✅ | ✅ |
-| Upload recordings, edit sentences, (re)start transcription | | ✅ | ✅ |
-| Manage members, change AI config, see usage, delete recordings | | | ✅ |
+| Share recordings with their own texts (within `shareRecords`), delete their own | ✅ | ✅ | ✅ |
+| AI recordings, add audio languages, edit sentences, (re)start transcription | | ✅ | ✅ |
+| Manage members, change AI config, see usage, delete any recording | | | ✅ |
 
 A membership with `"enabled": false` counts as no membership at all (403).
 A user with `"enabled": false` can't log in, and their existing tokens stop working.
@@ -59,3 +60,17 @@ Example membership body:
 ```
 
 Independently of quotas, every media file must be ≤ 90 minutes.
+
+## Sharing recordings (`shareRecords`)
+
+A recording made from the user's own texts (`"source": "file"`) is limited by the
+group's `shareRecords`: how many each member may create per calendar month (UTC).
+`0` means members can't share at all; the "Basic" group (privilege 0) has `0`,
+every other group `100` (set at startup for groups without the field, and when a
+group is created; a system admin may pass another value to
+`POST /api/admin/groups`). System admins are not limited. AI recordings don't
+count here: the AI quotas above apply to them. The app asks
+`GET /api/groups/{gid}/share-allowance` to show whether "Share" can be used, and
+over the limit `POST /api/groups/{gid}/recordings` answers
+`403 Monthly sharing quota exceeded` (`403 Sharing recordings is not allowed in
+this group` when the limit is 0).

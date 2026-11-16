@@ -61,6 +61,7 @@ from ..chat import GROUP_CHAT_DEFAULTS, group_chat_settings
 from ..config import settings
 from ..helpers import fail, new_id, utc_now_iso
 from ..payments import PRO_PRICES, PaymentError, stripe_api, vipps
+from ..quotas import DEFAULT_SHARE_RECORDS, share_limit
 from ..repository import membership_key, repo
 from ..schemas import CandidateRef, ChoosePlanRequest, StartPaymentRequest, VerifyEmailRequest
 from ..security import current_user
@@ -103,6 +104,7 @@ def plan_group_id(plan: str) -> str:
         if not group:
             group = {"id": new_id(), "name": name, "ai": dict(DEFAULT_AI_CONFIG),
                      "created_at": utc_now_iso(), "privilege": PLAN_PRIVILEGES[plan],
+                     "shareRecords": 0 if plan == BASIC else DEFAULT_SHARE_RECORDS,
                      **GROUP_CHAT_DEFAULTS}
             repo.put("groups", group["id"], group)
         return group["id"]
@@ -114,6 +116,16 @@ def ensure_group_privileges():
         for group in repo.list("groups"):
             if not isinstance(group.get("privilege"), int):
                 group["privilege"] = DEFAULT_PRIVILEGE
+                repo.put("groups", group["id"], group)
+
+
+def ensure_group_share_records():
+    """Give every group without "shareRecords" one (startup): 0 for privilege-0 ("Basic")
+    groups, whose members may not share recordings, else DEFAULT_SHARE_RECORDS."""
+    with repo.lock:
+        for group in repo.list("groups"):
+            if "shareRecords" not in group:
+                group["shareRecords"] = share_limit(group)
                 repo.put("groups", group["id"], group)
 
 

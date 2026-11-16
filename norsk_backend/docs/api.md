@@ -126,14 +126,15 @@ Notes:
 
 | Method | Path | Who | Body → Response |
 |---|---|---|---|
+| GET | `/api/groups/{gid}/share-allowance` | member | → `{enabled, limit, used, remaining}`: how many recordings with their own texts the user may still share this month (`limit`/`remaining` `null` = unlimited, for system admins) |
 | GET | `/api/groups/{gid}/ai-allowance` | uploader | → `{enabled, reason, remaining_recordings, remaining_minutes, max_duration_minutes}`: whether the user may use AI transcription now (`reason`: `disabled`, `recordings`, `minutes`, `group_minutes`; `null` values = unlimited) |
-| POST | `/api/groups/{gid}/recordings` | uploader | JSON: `name`, `language` + the media fields below → `202 {id, language, status}` (`"pending"` for AI, `"ready"` for manual) |
+| POST | `/api/groups/{gid}/recordings` | member (manual) / uploader (AI) | JSON: `name`, `language` (+ AI: `translations`, languages to translate into) + the media fields below → `202 {id, language, status}` (`"pending"` for AI, `"ready"` for manual). Manual: within the group's `shareRecords` per month |
 | PUT | `/api/recordings/{rid}/audio/{lang}` | uploader | JSON: the media fields below → `202 {id, language, status}`. Adds audio in `lang`, or replaces it; with manual texts, the languages in `sentences` are replaced |
-| GET | `/api/groups/{gid}/recordings` | member | → list of recordings |
-| GET | `/api/recordings/{rid}` | member | → one recording with its `audio` and `sentences` maps |
+| GET | `/api/groups/{gid}/recordings` | member | → list of recordings: the ready ones, plus those still queued or failed that the user may manage (own; all for group admins). Each has `author` (display name) and `size_bytes` (media + texts, approximate) |
+| GET | `/api/recordings/{rid}` | member | → one recording with its `audio` and `sentences` maps (404 if not ready and not the user's to manage) |
 | GET | `/api/recordings/{rid}/audio/{lang}` | member | → the audio (or video) file in `lang`; a Drive file is passed through, honouring `Range` |
 | PATCH | `/api/recordings/{rid}/sentences/{lang}/{index}` | uploader | `{text?, start_ms?, end_ms?}` → `{index, language, text, start_ms, end_ms}` |
-| DELETE | `/api/recordings/{rid}` | admin | → `{deleted: true}`. Deletes audio kept in our storage (never the user's Drive files). Works even if a file is already missing |
+| DELETE | `/api/recordings/{rid}` | author, admin | → `{deleted: true}`. Deletes audio kept in our storage (never the user's Drive files). Works even if a file is already missing |
 | POST | `/api/recordings/{rid}/transcribe/{lang}` | uploader | → `202 {status: "pending", id, language}`. Only if that audio is pending/failed, else 409 |
 
 `language` / `lang` is one of `en nb uk ru de da sv cs bg pl pt es fr el he it`
@@ -150,13 +151,20 @@ anyone who has the link. Media fields:
 | `drive_id` | the Drive file ID (required) |
 | `media_kind` | `"audio"` (default) or `"video"` |
 | `mime_type`, `file_name` | optional, as Drive reports them |
+| `size_bytes` | optional: the file's size, shown in the app's lists |
 | `mode` | `"ai"`: transcribed by the worker (group must allow it, quotas apply) · `"manual"`: the user's own texts and timings |
 | `start_ms` | manual: start of every sentence in the media, ascending |
 | `end_ms` | manual, optional: same length; a `null` (or missing list) is the next start, or the end of the media |
 | `sentences` | manual: `{language code: [text per sentence]}`, each list as long as `start_ms`; must include `language`. `no` is read as `nb` |
 
-The app reads the manual texts from JSON (`[{"nb": "Hei.", "en": "Hi.", "timeMs": 0, "endMs": 900}, …]`),
-SRT or WebVTT files (`lib/services/recording_texts.dart`) and sends them in this form.
+The app reads the manual texts from LanguageTutor's JSON and ODT exports (its link to the
+audio is ignored), from JSON (`[{"nb": "Hei.", "en": "Hi.", "timeMs": 0, "endMs": 900}, …]`),
+SRT or WebVTT files (`lib/services/recording_texts.dart`) and sends them in this form. The app can
+also keep such a recording only on the device, without sending it here.
+
+AI recordings are queued (`"pending"`); the worker transcribes them, translates the sentences into
+the entry's `translate_to` languages (OpenAI, `TRANSLATION_MODEL`, default `gpt-4o-mini`) and sets
+`"ready"`. Until then only their author and group admins see them.
 
 Errors: `422 Invalid name` · `422 Invalid Google Drive file ID` · `422 Could not
 read the media file on Google Drive…` (not shared, or not audio/video) ·

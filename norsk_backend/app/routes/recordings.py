@@ -24,18 +24,30 @@ takes priority. See docs/data-model.md.
 Texts and timings come either from the user ("timing": "manual", status
 "ready" at once) or from AI transcription ("timing": "ai"), which only groups
 that allow it get, within their quotas (quotas.py):
-    1. Created          -> status "pending"
+    1. Created          -> status "pending"  (the queue)
     2. Worker picks it  -> "processing"
-    3. Worker finishes  -> "ready" (sentences[lang] and timings filled in)
+    3. Worker finishes  -> "ready" (sentences[lang] and timings filled in, and
+                           translated into the entry's "translate_to" languages)
                            or "failed" (error set)
+
+Sharing: a recording made from the user's own texts ("source": "file") may be
+created by any member of the group, as many per month as the group's
+"shareRecords" allows (quotas.share_allowance); AI recordings ("source": "ai")
+need the uploader or admin role and the AI quotas. A recording whose audio is
+still in the queue (or failed) is shown only to its author and group admins:
+the others see it once it is ready. It may be deleted by its author, group
+admins and system admins.
 """
+
+import json
 
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import FileResponse, RedirectResponse
 
+from ..chat import display_name
 from ..drive_media import check_drive_id, media_duration, stream_response
 from ..helpers import LANGUAGES, fail, new_id, utc_now_iso
-from ..quotas import ai_allowance, check_ai_quota
+from ..quotas import ai_allowance, check_ai_quota, check_share_quota, share_allowance
 from ..repository import repo
 from ..schemas import NewRecordingRequest, RecordingMediaRequest, SentenceEditRequest
 from ..security import ADMIN, UPLOADER, current_user, get_membership, require_role
@@ -83,13 +95,33 @@ def check_language(lang):
         fail(422, "Unsupported language")
 
 
+def recording_size(recording) -> int:
+    """Approximate size in bytes: the media files (as far as known) plus the texts."""
+    media = sum(entry.get("size_bytes") or 0 for entry in recording["audio"].values())
+    texts = len(json.dumps(recording["sentences"], ensure_ascii=False).encode("utf-8"))
+    return media + texts
+
+
+def is_ready(recording) -> bool:
+    """Whether every audio of the recording has its texts and timings (none queued or failed)."""
+    return all(entry["status"] == "ready" for entry in recording["audio"].values())
+
+
+def can_manage(user, membership, recording) -> bool:
+    """Its author, group admins and system admins (whose membership says admin)."""
+    return recording.get("uploader_id") == user["id"] or membership["role"] == ADMIN
+
+
 def public_recording(recording) -> dict:
-    """Copy of a recording for clients: without the internal storage keys."""
+    """Copy of a recording for clients: without the internal storage keys, with
+    its author's name and approximate size."""
     audio = {
         lang: {k: v for k, v in entry.items() if k != "audio_key"}
         for lang, entry in recording["audio"].items()
     }
-    return {**recording, "audio": audio}
+    author_id = recording.get("uploader_id")
+    return {**recording, "audio": audio, "author": display_name(author_id) if author_id else "",
+            "size_bytes": recording_size(recording)}
 
 
 def sentence_count(recording) -> int:
@@ -105,7 +137,10 @@ def get_recording_for(user, recording_id) -> dict:
     recording = repo.get("recordings", recording_id)
     if not recording:
         fail(404, "Recording not found")
-    get_membership(user, recording["group_id"])
+    membership = get_membership(user, recording["group_id"])
+    # Not ready yet (queued or failed): only for those who may manage it.
+    if not is_ready(recording) and not can_manage(user, membership, recording):
+        fail(404, "Recording not found")
     return recording
 
 
@@ -150,13 +185,16 @@ def manual_timing(data: RecordingMediaRequest, lang, seconds) -> tuple[list, lis
     return starts, ends, sentences
 
 
-def receive_media(gid, recording_id, lang, user, membership, data: RecordingMediaRequest, save) -> dict:
+def receive_media(gid, recording_id, lang, user, membership, data: RecordingMediaRequest, save,
+                  share=False, translate_to=()) -> dict:
     """Shared steps: check the Drive file and the texts or the AI quota, and call
     `save(entry, sentences)` with the new audio entry and the sentences to set
     (language -> texts; empty for AI). Returns the entry.
 
     The lock is held from the quota check until `save` has run, so two
-    simultaneous requests can't both squeeze under the same limit.
+    simultaneous requests can't both squeeze under the same limit. `share`: a
+    new recording from the user's own texts, which counts against the group's
+    share limit. `translate_to`: (AI) languages to translate the sentences into.
     """
     check_language(lang)
     check_drive_id(data.drive_id)
@@ -168,6 +206,8 @@ def receive_media(gid, recording_id, lang, user, membership, data: RecordingMedi
     starts, ends, sentences = manual_timing(data, lang, seconds) if manual else ([], [], {})
 
     with repo.lock:
+        if manual and share:
+            check_share_quota(gid, user)
         if not manual:
             check_ai_quota(gid, user, membership, seconds)
         entry = {
@@ -175,6 +215,7 @@ def receive_media(gid, recording_id, lang, user, membership, data: RecordingMedi
             "media_kind": data.media_kind,
             "mime_type": data.mime_type,
             "file_name": data.file_name,
+            "size_bytes": data.size_bytes,
             "timing": data.mode,
             "status": "ready" if manual else "pending",
             "error": None,
@@ -184,6 +225,8 @@ def receive_media(gid, recording_id, lang, user, membership, data: RecordingMedi
             "start_ms": starts,
             "end_ms": ends,
         }
+        if not manual and translate_to:
+            entry["translate_to"] = list(translate_to)
         save(entry, sentences)
     return entry
 
@@ -198,13 +241,32 @@ def get_ai_allowance(gid: str, user=Depends(current_user)):
     return ai_allowance(gid, user, membership)
 
 
+@router.get("/api/groups/{gid}/share-allowance")
+def get_share_allowance(gid: str, user=Depends(current_user)):
+    """How many recordings with their own texts the user may still share in
+    this group this month (see quotas.share_allowance)."""
+    get_membership(user, gid)
+    return share_allowance(gid, user)
+
+
 @router.post("/api/groups/{gid}/recordings", status_code=202)
 def create_recording(gid: str, data: NewRecordingRequest, user=Depends(current_user)):
     """Create a recording from a media file on the user's Google Drive, spoken
-    in `language`. With mode "ai" it is queued for transcription."""
-    membership = require_role(user, gid, [UPLOADER, ADMIN])
+    in `language`. With mode "manual" (the user's own texts) any member may
+    share it, within the group's share limit. With mode "ai" (uploaders and
+    admins) it is queued for transcription and translation into `translations`,
+    and shown to the rest of the group once ready."""
+    manual = data.mode == "manual"
+    membership = get_membership(user, gid) if manual else require_role(user, gid, [UPLOADER, ADMIN])
     if not data.name.strip():
         fail(422, "Invalid name")
+    check_language(data.language)
+    translate_to = []
+    for code in data.translations:
+        code = LANGUAGE_ALIASES.get(code, code)
+        check_language(code)
+        if code != data.language and code not in translate_to:
+            translate_to.append(code)
     recording_id = new_id()
 
     def save(entry, sentences):
@@ -214,11 +276,13 @@ def create_recording(gid: str, data: NewRecordingRequest, user=Depends(current_u
             "name": data.name.strip(),
             "uploader_id": user["id"],
             "created_at": utc_now_iso(),
+            "source": "file" if manual else "ai",
             "audio": {data.language: entry},
             "sentences": sentences,
         })
 
-    entry = receive_media(gid, recording_id, data.language, user, membership, data, save)
+    entry = receive_media(gid, recording_id, data.language, user, membership, data, save,
+                          share=manual, translate_to=translate_to)
     return {"id": recording_id, "language": data.language, "status": entry["status"]}
 
 
@@ -247,9 +311,12 @@ def set_audio(rid: str, lang: str, data: RecordingMediaRequest, user=Depends(cur
 
 @router.get("/api/groups/{gid}/recordings")
 def list_recordings(gid: str, user=Depends(current_user)):
-    """All recordings in the group (any member may list)."""
-    get_membership(user, gid)
-    return [public_recording(r) for r in repo.list("recordings") if r["group_id"] == gid]
+    """The group's recordings (any member may list): the ready ones, and those
+    still queued or failed that the user may manage (their own; all of them
+    for group admins)."""
+    membership = get_membership(user, gid)
+    return [public_recording(r) for r in repo.list("recordings")
+            if r["group_id"] == gid and (is_ready(r) or can_manage(user, membership, r))]
 
 
 @router.get("/api/recordings/{rid}")
@@ -316,9 +383,10 @@ def edit_sentence(rid: str, lang: str, index: int, data: SentenceEditRequest, us
 @router.delete("/api/recordings/{rid}")
 def delete_recording(rid: str, user=Depends(current_user)):
     """Delete the recording, and its audio files kept in our storage (files on
-    the user's Google Drive stay there). Group admins only."""
+    the user's Google Drive stay there). Its author, group admins and system admins."""
     recording = get_recording_for(user, rid)
-    require_role(user, recording["group_id"], [ADMIN])
+    if not can_manage(user, get_membership(user, recording["group_id"]), recording):
+        fail()
     for entry in recording["audio"].values():
         delete_stored_audio(entry)
     repo.delete("recordings", rid)

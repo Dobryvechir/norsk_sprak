@@ -109,3 +109,56 @@ def check_ai_quota(group_id, user, membership, new_seconds):
     limit = (group.get("ai") or {}).get("monthly_audio_minutes_limit")
     if limit is not None and sum(a["duration_seconds"] for a in group_uploads) + new_seconds > limit * 60:
         fail(403, REASON_MESSAGES["group_minutes"])
+
+
+# --- Sharing recordings made from the user's own texts ------------------------
+#
+# group["shareRecords"]: how many recordings with their own texts (a JSON or ODT
+# file, "manual" timing) each member may share in the group per month. 0 means
+# members can't share at all (the "Basic" group). AI recordings don't count:
+# they are limited by the AI quotas above.
+
+DEFAULT_SHARE_RECORDS = 100
+
+
+def share_limit(group) -> int:
+    """The group's monthly share limit per member (see above). Groups saved before
+    the field existed get 0 if they are privilege-0 ("Basic"), else DEFAULT_SHARE_RECORDS."""
+    value = group.get("shareRecords")
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return 0 if group.get("privilege") == 0 else DEFAULT_SHARE_RECORDS
+
+
+def is_shared_file(recording) -> bool:
+    """Whether the recording was shared with the user's own texts (not made by AI)."""
+    source = recording.get("source")
+    if source:
+        return source == "file"
+    return any(not uses_ai(entry) for entry in recording["audio"].values())
+
+
+def share_allowance(group_id, user) -> dict:
+    """How many recordings `user` may still share in the group this month:
+        {"enabled": bool, "limit": int | None, "used": int, "remaining": int | None}
+    None means unlimited (system admins)."""
+    group = repo.get("groups", group_id)
+    used = sum(
+        1 for r in repo.list("recordings")
+        if r["group_id"] == group_id and r.get("uploader_id") == user["id"]
+        and r.get("created_at", "")[:7] == current_month() and is_shared_file(r)
+    )
+    if user.get("system_admin"):
+        return {"enabled": True, "limit": None, "used": used, "remaining": None}
+    limit = share_limit(group)
+    remaining = max(0, limit - used)
+    return {"enabled": remaining > 0, "limit": limit, "used": used, "remaining": remaining}
+
+
+def check_share_quota(group_id, user):
+    """Fail with 403 unless `user` may share one more recording in the group.
+    Call it holding `repo.lock` and save the recording before releasing it."""
+    allowance = share_allowance(group_id, user)
+    if not allowance["enabled"]:
+        fail(403, "Sharing recordings is not allowed in this group" if allowance["limit"] == 0
+             else "Monthly sharing quota exceeded")

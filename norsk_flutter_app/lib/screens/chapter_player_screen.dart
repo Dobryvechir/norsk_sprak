@@ -13,10 +13,13 @@ import 'chapters_screen.dart';
 /// from the audio's own `url` if it has one, else fetched from the server's audio endpoint into memory.
 class ChapterPlayerScreen extends StatefulWidget {
   final Api api; final Recording chapter;
-  const ChapterPlayerScreen({super.key, required this.api, required this.chapter});
+  /// Where the saved copy is (default: the saved book chapters; the Recordings screen passes its own).
+  final OfflineChapters? store;
+  const ChapterPlayerScreen({super.key, required this.api, required this.chapter, this.store});
   @override State<ChapterPlayerScreen> createState() => _ChapterPlayerScreenState();
 }
 class _ChapterPlayerScreenState extends State<ChapterPlayerScreen> {
+  late final offline = widget.store ?? OfflineChapters(widget.api);
   SentencePlayer? player;
   /// The language of the audio being played.
   String? language;
@@ -48,7 +51,7 @@ class _ChapterPlayerScreenState extends State<ChapterPlayerScreen> {
     setState(() { player = p; this.language = language; error = null; loading = 0; });
     bool current() => mounted && player == p;
     try {
-      final saved = kIsWeb ? await OfflineChapters(widget.api).webAudioUrl(r, language) : null;
+      final saved = kIsWeb ? await offline.webAudioUrl(r, language) : null;
       final external = kIsWeb ? widget.api.externalAudioUrl(r, language) : null;
       if (saved != null) {
         if (!current()) { OfflineChapters.releaseWebAudioUrl(saved); return; }
@@ -62,7 +65,7 @@ class _ChapterPlayerScreenState extends State<ChapterPlayerScreen> {
         if (!current()) return;
         await p.openUri(Uri.dataFromBytes(bytes, mimeType: type ?? 'audio/mpeg'));
       } else {
-        final file = await OfflineChapters(widget.api).audioFile(r, language);
+        final file = await offline.audioFile(r, language);
         if (!current()) return;
         if (file == null) { setState(() => error = context.tr('audioNotSaved')); return; }
         await p.open(file.path);

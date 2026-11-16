@@ -12,11 +12,16 @@ class StudyGroup {
   final String? myRole;
   /// The group's privilege level: 0 = "Basic" (its members may change to the Pro plan), 1 = "Advanced".
   final int? privilege;
-  const StudyGroup(this.id, this.name, [this.myRole, this.privilege]);
+  /// How many recordings with their own texts each member may share per month (0 = none), when reported.
+  final int? shareRecords;
+  const StudyGroup(this.id, this.name, [this.myRole, this.privilege, this.shareRecords]);
   bool get isAdmin => myRole == 'admin';
   bool get isBasic => privilege == 0;
+  /// Whether the user's role allows AI transcription at all (the server still checks the group's quotas).
+  bool get mayUseAi => myRole == 'uploader' || myRole == 'admin';
   factory StudyGroup.fromJson(Map<String, dynamic> j) =>
-    StudyGroup('${j['id']}', '${j['name']}', j['my_role'] as String?, (j['privilege'] as num?)?.toInt());
+    StudyGroup('${j['id']}', '${j['name']}', j['my_role'] as String?, (j['privilege'] as num?)?.toInt(),
+      (j['shareRecords'] as num?)?.toInt());
 }
 
 /// A person who signed up and waits for a system admin (never includes the password).
@@ -111,6 +116,19 @@ class RecordingAudio {
   RecordingAudio withLocalFile(String file) => RecordingAudio(status, createdAt, durationSeconds, error, startMs, endMs, file, url);
 }
 
+/// Who made a recording, when, and its approximate size: shown in the lists of shared and saved recordings.
+class RecordingInfo {
+  final String? uploaderId, author, createdAt;
+  /// The media files plus the texts, in bytes (on the server an estimate; for a saved copy what it takes here).
+  final int? sizeBytes;
+  /// "file" (shared with the user's own texts), "ai" (transcribed by the server) or "local" (made on this
+  /// device and not shared).
+  final String? source;
+  const RecordingInfo({this.uploaderId, this.author, this.createdAt, this.sizeBytes, this.source});
+  DateTime? get created => createdAt == null ? null : DateTime.tryParse(createdAt!)?.toLocal();
+  RecordingInfo withSize(int bytes) => RecordingInfo(uploaderId: uploaderId, author: author, createdAt: createdAt, sizeBytes: bytes, source: source);
+}
+
 /// A recording: per language an optional audio, and per language optional sentence texts.
 /// Sentence i means the same sentence in every language.
 /// A book chapter has the same shape, with [sectionId] instead of a group ([groupId] is then '').
@@ -119,16 +137,25 @@ class Recording {
   final String? sectionId;
   final Map<String, RecordingAudio> audio;
   final Map<String, List<String>> sentences;
-  const Recording(this.id, this.groupId, this.name, this.audio, this.sentences, [this.sectionId]);
+  final RecordingInfo info;
+  const Recording(this.id, this.groupId, this.name, this.audio, this.sentences, [this.sectionId, this.info = const RecordingInfo()]);
   bool get isChapter => sectionId != null;
+  /// Whether every audio has its texts and timings (none queued for AI or failed).
+  bool get isReady => audio.values.every((a) => a.status == 'ready');
   factory Recording.fromJson(Map<String, dynamic> j) => Recording('${j['id']}', '${j['group_id'] ?? ''}', '${j['name']}',
     {for (final e in ((j['audio'] as Map?) ?? const {}).entries) '${e.key}': RecordingAudio.fromJson(Map<String, dynamic>.from(e.value as Map))},
     {for (final e in ((j['sentences'] as Map?) ?? const {}).entries) '${e.key}': [for (final t in e.value as List) '$t']},
-    j['sectionId'] as String?);
+    j['sectionId'] as String?,
+    RecordingInfo(uploaderId: j['uploader_id'] as String?, author: j['author'] as String?, createdAt: j['created_at'] as String?,
+      sizeBytes: (j['size_bytes'] as num?)?.toInt(), source: j['source'] as String?));
   /// The same JSON as [Recording.fromJson] reads.
   Map<String, dynamic> toJson() => {'id': id, 'group_id': groupId, 'name': name, if (sectionId != null) 'sectionId': sectionId,
-    'audio': {for (final e in audio.entries) e.key: e.value.toJson()}, 'sentences': sentences};
-  Recording withAudio(Map<String, RecordingAudio> audio) => Recording(id, groupId, name, audio, sentences, sectionId);
+    'audio': {for (final e in audio.entries) e.key: e.value.toJson()}, 'sentences': sentences,
+    if (info.uploaderId != null) 'uploader_id': info.uploaderId, if (info.author != null) 'author': info.author,
+    if (info.createdAt != null) 'created_at': info.createdAt, if (info.sizeBytes != null) 'size_bytes': info.sizeBytes,
+    if (info.source != null) 'source': info.source};
+  Recording withAudio(Map<String, RecordingAudio> audio) => Recording(id, groupId, name, audio, sentences, sectionId, info);
+  Recording withInfo(RecordingInfo info) => Recording(id, groupId, name, audio, sentences, sectionId, info);
 
   /// Number of sentences: the longest sentence or timing list of any language.
   int get sentenceCount => [
@@ -199,7 +226,20 @@ class Membership {
 class RecordingMedia {
   final String driveId, name, kind;
   final String? mimeType;
-  const RecordingMedia(this.driveId, this.name, this.kind, [this.mimeType]);
+  /// In bytes, when Drive reports it.
+  final int? size;
+  const RecordingMedia(this.driveId, this.name, this.kind, [this.mimeType, this.size]);
+}
+
+/// How many recordings with their own texts the user may still share in a group this month
+/// ([limit] and [remaining] are null when unlimited).
+class ShareAllowance {
+  final bool enabled;
+  final int? limit, remaining;
+  final int used;
+  const ShareAllowance(this.enabled, {this.limit, this.remaining, this.used = 0});
+  factory ShareAllowance.fromJson(Map<String, dynamic> j) => ShareAllowance(j['enabled'] == true,
+    limit: (j['limit'] as num?)?.toInt(), remaining: (j['remaining'] as num?)?.toInt(), used: (j['used'] as num?)?.toInt() ?? 0);
 }
 
 /// Whether the user may have a recording transcribed by AI in a group now ([reason] says why not:

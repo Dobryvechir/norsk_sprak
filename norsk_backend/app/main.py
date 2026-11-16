@@ -52,6 +52,7 @@ async def lifespan(app: FastAPI):
     upgrade_recordings()
     plans.ensure_group_privileges()  # old groups get privilege 7
     plans.ensure_plan_groups()  # "Basic" (privilege 0) and "Advanced" (privilege 1)
+    plans.ensure_group_share_records()  # "Basic" 0, other groups 100 shared recordings a month
     books.seed_sample_books()
     purge_expired(force=True)
     yield

@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
+import 'package:xml/xml.dart';
 import '../l10n/l10n.dart';
 
 /// The file types a recording's own texts and timings can be read from.
-const recordingTextsExtensions = ['.json', '.srt', '.vtt'];
+const recordingTextsExtensions = ['.json', '.odt', '.srt', '.vtt'];
 
-/// Language codes other programs use for one of ours.
-const _languageAliases = {'no': 'nb', 'nob': 'nb', 'nno': 'nn'};
+/// Language codes other programs use for one of ours ("cz" and "gr": LanguageTutor's files).
+const _languageAliases = {'no': 'nb', 'nob': 'nb', 'nno': 'nn', 'cz': 'cs', 'gr': 'el'};
+String _code(String key) => _languageAliases[key.trim().toLowerCase()] ?? key.trim().toLowerCase();
 /// JSON keys of an item's start and (optional) end, in milliseconds.
 const _startKeys = ['timeMs', 'startMs', 'time_ms', 'start_ms'];
 const _endKeys = ['endMs', 'end_ms'];
@@ -15,12 +18,17 @@ const _endKeys = ['endMs', 'end_ms'];
 /// start (and optionally end) in the audio. A missing end is set by the server: the next sentence's
 /// start, or the end of the audio.
 class RecordingTexts {
-  const RecordingTexts(this.sentences, this.startMs, this.endMs);
+  const RecordingTexts(this.sentences, this.startMs, this.endMs, [this.language]);
   /// Language code → one text per sentence ('' where an item has none in that language).
   final Map<String, List<String>> sentences;
   final List<int> startMs;
   final List<int?> endMs;
+  /// The language spoken in the media, when the file says it (LanguageTutor's JSON and ODT files).
+  final String? language;
   int get count => startMs.length;
+  /// [endMs] with every missing end filled in: the next sentence's start (the last one: [lastEndMs]).
+  List<int> filledEnds(int lastEndMs) => [for (var i = 0; i < count; i++)
+    endMs[i] ?? (i + 1 < count && startMs[i + 1] > startMs[i] ? startMs[i + 1] : lastEndMs)];
   /// The fields of the recording requests (mode "manual").
   Map<String, dynamic> toJson() => {'sentences': sentences, 'start_ms': startMs, 'end_ms': endMs};
 }
@@ -34,8 +42,17 @@ class RecordingTextsException implements Exception {
   @override String toString() => message;
 }
 
+/// Reads the file [fileName] with content [bytes]: by its extension an ODT document (as LanguageTutor
+/// makes them), JSON, SRT or WebVTT. See [parseRecordingTexts].
+RecordingTexts parseRecordingTextsBytes(String fileName, List<int> bytes, String language) {
+  if (p.extension(fileName).toLowerCase() == '.odt') return parseOdtTexts(bytes, language);
+  return parseRecordingTexts(fileName, utf8.decode(bytes, allowMalformed: true), language);
+}
+
 /// Reads [content] of the file [fileName]: by its extension JSON, SRT or WebVTT. The texts of SRT and
 /// WebVTT are in [language], the language spoken in the media; JSON items must have a text in it.
+/// LanguageTutor's JSON says which language its audio is in: [language] is used only if the file has
+/// texts in it, and the result's [RecordingTexts.language] tells the one used.
 RecordingTexts parseRecordingTexts(String fileName, String content, String language) {
   if (content.startsWith('﻿')) content = content.substring(1);
   return switch (p.extension(fileName).toLowerCase()) {
@@ -46,11 +63,13 @@ RecordingTexts parseRecordingTexts(String fileName, String content, String langu
 }
 
 /// A JSON list of items such as `{"nb": "Hei.", "en": "Hi.", "timeMs": 0}`: every key but the
-/// times is a language code with that language's text of the sentence. Also `{"items": [...]}`.
+/// times is a language code with that language's text of the sentence. Also `{"items": [...]}`,
+/// and LanguageTutor's export (see [parseExportedJson]).
 RecordingTexts parseJsonTexts(String content, String language) {
   Object? data;
   try { data = jsonDecode(content); }
   on FormatException catch (e) { throw RecordingTextsException('textsInvalidJson', {'error': e.message}); }
+  if (data is Map && data['audio'] is Map && data['sentences'] is Map) return parseExportedJson(data, language);
   if (data is Map && data['items'] is List) data = data['items'];
   if (data is! List) throw const RecordingTextsException('textsNotList');
   final items = <(int, int?, Map<String, String>)>[];
@@ -83,6 +102,148 @@ RecordingTexts parseJsonTexts(String content, String language) {
   final codes = orderedLanguages({for (final item in items) ...item.$3.keys});
   return RecordingTexts({for (final code in codes) code: [for (final item in items) item.$3[code] ?? '']},
     [for (final item in items) item.$1], [for (final item in items) item.$2]);
+}
+
+/// LanguageTutor's JSON export (its audio URL and key are ignored: the media is the one chosen here):
+/// `{"audio": {"nb": {"start_ms": [0, 100], "end_ms": [100, 200], ...}},
+///   "sentences": {"nb": ["line 1", "line 2"], "en": [...]}}`
+/// The audio's language is the one in "audio" ([language] if it is there).
+RecordingTexts parseExportedJson(Map data, String language) {
+  final audio = {for (final e in (data['audio'] as Map).entries) _code('${e.key}'): e.value};
+  final timed = [for (final e in audio.entries) if (e.value is Map && (e.value as Map)['start_ms'] is List) e.key];
+  if (timed.isEmpty) throw const RecordingTextsException('textsNoTimings');
+  final main = timed.contains(language) ? language : timed.first;
+  final entry = audio[main] as Map;
+  List<int?> times(Object? list, String key) {
+    if (list == null) return const [];
+    if (list is! List) throw RecordingTextsException('textsBadTiming', {'item': 1});
+    return [for (var i = 0; i < list.length; i++) switch (list[i]) {
+      null => null,
+      num v when v >= 0 && v == v.roundToDouble() => v.toInt(),
+      _ => throw RecordingTextsException('textsBadTiming', {'item': i + 1}),
+    }];
+  }
+  final starts = times(entry['start_ms'], 'start_ms'), ends = times(entry['end_ms'], 'end_ms');
+  if (starts.any((s) => s == null)) throw RecordingTextsException('textsBadTiming', {'item': starts.indexOf(null) + 1});
+  final texts = <String, List<String>>{};
+  for (final e in (data['sentences'] as Map).entries) {
+    final code = _code('${e.key}');
+    if (!languageNames.containsKey(code)) throw RecordingTextsException('textsUnknownLanguage', {'key': '${e.key}'});
+    if (e.value is! List) throw const RecordingTextsException('textsNotList');
+    texts[code] = [for (final t in e.value as List) t == null ? '' : '$t'.trim()];
+  }
+  return _timedTexts(texts, main, starts.cast<int>(), [for (var i = 0; i < starts.length; i++) i < ends.length ? ends[i] : null]);
+}
+
+/// An ODT document as LanguageTutor makes it: a line "Audio: ..." (ignored) and a table whose header row
+/// is "Time" and the language codes (the first one is the audio's language), then one row per sentence:
+/// the time its audio ends ("m:ss.cc") and its text in each language. A sentence starts where the one
+/// before ends (the first at 0).
+RecordingTexts parseOdtTexts(List<int> bytes, String language) {
+  final XmlDocument document;
+  try {
+    final content = ZipDecoder().decodeBytes(bytes).findFile('content.xml');
+    if (content == null) throw const FormatException();
+    document = XmlDocument.parse(utf8.decode(content.content, allowMalformed: true));
+  } catch (_) { throw const RecordingTextsException('textsInvalidOdt'); }
+
+  for (final table in document.findAllElements('table:table')) {
+    final rows = [for (final row in table.findAllElements('table:table-row')) _odtCells(row)];
+    final header = rows.indexWhere((r) => r.isNotEmpty && r.first.trim().toLowerCase() == 'time');
+    if (header < 0) continue;
+    final codes = [for (final c in rows[header].skip(1)) _code(c)];
+    while (codes.isNotEmpty && codes.last.isEmpty) { codes.removeLast(); }
+    if (codes.isEmpty) continue;
+    for (final c in codes) {
+      if (!languageNames.containsKey(c)) throw RecordingTextsException('textsUnknownLanguage', {'key': c});
+    }
+    final texts = {for (final c in codes) c: <String>[]};
+    final ends = <int?>[];
+    for (final row in rows.skip(header + 1)) {
+      String cell(int i) => i < row.length ? row[i].trim() : '';
+      final line = [for (var i = 0; i < codes.length; i++) cell(i + 1)];
+      final time = cell(0);
+      if (time.isEmpty && line.every((t) => t.isEmpty)) continue; // an empty row
+      if (time.toLowerCase() == 'time') continue; // the header again (a table's column names, then its first row)
+      final ms = time.isEmpty ? null : _odtTime(time);
+      if (time.isNotEmpty && ms == null) throw RecordingTextsException('textsBadTiming', {'item': ends.length + 1});
+      ends.add(ms);
+      for (var i = 0; i < codes.length; i++) { texts[codes[i]]!.add(line[i]); }
+    }
+    final main = codes.contains(language) ? language : codes.first;
+    // Rows without a time at the end: their audio isn't marked yet.
+    final timed = ends.lastIndexWhere((e) => e != null) + 1;
+    if (ends.take(timed).contains(null)) throw RecordingTextsException('textsBadTiming', {'item': ends.indexOf(null) + 1});
+    final endTimes = ends.take(timed).cast<int>().toList();
+    final starts = [for (var i = 0; i < endTimes.length; i++) i == 0 ? 0 : endTimes[i - 1]];
+    return _timedTexts(texts, main, starts, endTimes);
+  }
+  throw const RecordingTextsException('textsOdtNoTable');
+}
+
+/// The texts of one table row's cells, with repeated cells expanded.
+List<String> _odtCells(XmlElement row) {
+  final cells = <String>[];
+  for (final cell in row.childElements) {
+    if (cell.name.qualified != 'table:table-cell' && cell.name.qualified != 'table:covered-table-cell') continue;
+    final repeat = (int.tryParse(cell.getAttribute('table:number-columns-repeated') ?? '') ?? 1).clamp(1, 50);
+    final text = [for (final para in cell.findAllElements('text:p')) _odtText(para)].join('\n');
+    for (var i = 0; i < repeat; i++) { cells.add(text); }
+  }
+  return cells;
+}
+
+/// The text of a paragraph, with ODT's spaces, tabs and line breaks.
+String _odtText(XmlNode node) {
+  final out = StringBuffer();
+  for (final child in node.children) {
+    if (child is XmlText) { out.write(child.value); }
+    else if (child is XmlElement) {
+      switch (child.name.qualified) {
+        case 'text:s': out.write(' ' * (int.tryParse(child.getAttribute('text:c') ?? '') ?? 1));
+        case 'text:tab': out.write('\t');
+        case 'text:line-break': out.write(' ');
+        default: out.write(_odtText(child));
+      }
+    }
+  }
+  return out.toString();
+}
+
+/// LanguageTutor's time "m:ss.cc" (also "h:mm:ss.cc", "ss.ccc") → milliseconds; null if it isn't one.
+int? _odtTime(String text) {
+  final m = RegExp(r'^(?:(\d+):)?(?:(\d+):)?(\d+)(?:[.,](\d{1,3}))?$').firstMatch(text.replaceAll(' ', ''));
+  if (m == null) return null;
+  final parts = [m.group(1), m.group(2)].whereType<String>().map(int.parse).toList();
+  var minutes = 0;
+  for (final part in parts) { minutes = minutes * 60 + part; }
+  final fraction = m.group(4) ?? '';
+  return (minutes * 60 + int.parse(m.group(3)!)) * 1000 + (fraction.isEmpty ? 0 : int.parse(fraction.padRight(3, '0')));
+}
+
+/// Checks a file's timed sentences: [starts] ascending, every given end after its start, texts in [main]
+/// for every timed sentence; lines of other languages beyond the timed ones are dropped (they are empty)
+/// and short lists are padded with ''.
+RecordingTexts _timedTexts(Map<String, List<String>> texts, String main, List<int> starts, List<int?> ends) {
+  final count = starts.length;
+  if (count == 0) throw const RecordingTextsException('textsEmpty');
+  for (var i = 0; i < count; i++) {
+    final end = ends[i];
+    if ((i > 0 && starts[i] < starts[i - 1]) || (end != null && end <= starts[i])) {
+      throw RecordingTextsException('textsBadTiming', {'item': i + 1});
+    }
+  }
+  final mainTexts = texts[main] ?? const [];
+  final untimed = mainTexts.skip(count).where((t) => t.isNotEmpty).length;
+  if (untimed > 0) throw RecordingTextsException('textsMissingTimes', {'count': untimed});
+  if (!mainTexts.take(count).any((t) => t.isNotEmpty)) {
+    throw RecordingTextsException('textsNoLanguageText', {'language': languageNames[main] ?? main});
+  }
+  final codes = orderedLanguages(texts.keys);
+  return RecordingTexts({
+    for (final c in codes) if (texts[c]!.take(count).any((t) => t.isNotEmpty))
+      c: [for (var i = 0; i < count; i++) i < texts[c]!.length ? texts[c]![i] : ''],
+  }, starts, ends, main);
 }
 
 /// A stable sort (List.sort isn't), so items starting together keep their order.

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..chat import GROUP_CHAT_DEFAULTS
 from ..helpers import fail, new_id, utc_now_iso
+from ..quotas import share_limit
 from ..repository import repo
 from ..schemas import CreateGroupRequest, CreateUserRequest
 from ..security import current_user, password_hasher, public_user, require_system_admin
@@ -51,5 +52,6 @@ def create_group(data: CreateGroupRequest, user=Depends(current_user)):
         **GROUP_CHAT_DEFAULTS,
         **chosen,
     }
+    group["shareRecords"] = share_limit(group)
     repo.put("groups", group["id"], group)
     return group

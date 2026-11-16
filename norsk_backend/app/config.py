@@ -31,6 +31,8 @@ class Settings(BaseSettings):
 
     # Key for OpenAI Whisper transcription (shared by all groups).
     openai_api_key: str = ""
+    # OpenAI chat model used to translate AI-transcribed recordings.
+    translation_model: str = "gpt-4o-mini"
 
     # Google Drive settings, only used when audio_backend == "google_drive".
     google_drive_credentials_file: str = ""

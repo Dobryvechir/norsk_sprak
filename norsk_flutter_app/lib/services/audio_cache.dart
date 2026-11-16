@@ -17,6 +17,13 @@ class AudioCache {
     // A recording's audio may be a video (or a browser recording) saved through Media.
     'video/quicktime': 'mov', 'video/webm': 'webm', 'audio/webm': 'webm',
   };
+  /// The extension for a file of [mimeType] named [fileName]: the name's own if it is a known one,
+  /// else from the media type, else "mp3".
+  static String extensionFor(String? mimeType, String? fileName) {
+    final own = p.extension(fileName ?? '').replaceFirst('.', '').toLowerCase();
+    if (_extensions.contains(own)) return own;
+    return _mimeExtensions[(mimeType ?? '').split(';').first.trim().toLowerCase()] ?? 'mp3';
+  }
   final Api api;
   AudioCache(this.api);
   Future<Directory> _dir() async {

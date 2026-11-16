@@ -6,8 +6,9 @@ Run it as a separate process next to the API server (exactly one worker):
     python -m app.worker
 
 It loops forever: pick the next audio with status "pending" (any recording,
-any language), transcribe it in its language, save the sentences and timings,
-and record the usage. The audio's status goes:
+any language), transcribe it in its language, translate the sentences into the
+entry's "translate_to" languages, save the sentences and timings, and record
+the usage. The audio's status goes:
 
     pending -> processing -> ready     (success)
                           -> failed    (error message saved in "error")
@@ -23,6 +24,7 @@ from .migrations import upgrade_recordings
 from .repository import repo
 from .storage import get_storage
 from .transcription import transcribe
+from .translation import translate_sentences
 
 IDLE_SLEEP_SECONDS = 3  # how long to wait when there's nothing to do
 
@@ -51,13 +53,14 @@ def audio_identity(entry) -> tuple:
     return entry.get("audio_key"), entry.get("drive_id"), entry.get("created_at")
 
 
-def save_result(recording_id, lang, identity, changes, sentences=None) -> bool:
+def save_result(recording_id, lang, identity, changes, sentences=None, translations=None) -> bool:
     """Apply the worker's results to the current copy of the recording.
 
     Transcription takes long, and meanwhile the recording may have been
     deleted, the audio replaced (see audio_identity), or other languages edited.
-    So only this language's audio entry (and sentences) are changed, and only
-    if it is still the same audio. Returns False if it is gone.
+    So only this language's audio entry (and sentences, plus the sentences of
+    `translations`: language -> texts) are changed, and only if it is still the
+    same audio. Returns False if it is gone.
     """
     with repo.lock:
         recording = repo.get("recordings", recording_id)
@@ -67,6 +70,7 @@ def save_result(recording_id, lang, identity, changes, sentences=None) -> bool:
         entry.update(changes)
         if sentences is not None:
             recording["sentences"][lang] = sentences
+        recording["sentences"].update(translations or {})
         repo.put("recordings", recording_id, recording)
         return True
 
@@ -104,14 +108,21 @@ def run_once() -> bool:
             temp_path = audio_path = download_to_temp(entry["drive_id"])
         else:
             audio_path = get_storage().get(entry["audio_key"])
+        size_bytes = audio_path.stat().st_size
         sentences = transcribe(audio_path, ai["provider"], ai["model"], language=lang)
+        texts = [s["text"] for s in sentences]
+        translations = {
+            target: translate_sentences(texts, lang, target)
+            for target in entry.get("translate_to") or [] if target != lang
+        }
 
         save_result(recording["id"], lang, identity, {
             "status": "ready",
             "error": None,
+            "size_bytes": entry.get("size_bytes") or size_bytes,
             "start_ms": [s["start_ms"] for s in sentences],
             "end_ms": [s["end_ms"] for s in sentences],
-        }, sentences=[s["text"] for s in sentences])
+        }, sentences=texts, translations=translations)
 
         # One usage record per transcribed audio. Written even if the
         # recording is deleted meanwhile: the AI minutes were spent either way.
@@ -125,6 +136,7 @@ def run_once() -> bool:
             "audio_minutes": entry["duration_seconds"] / 60,
             "provider": ai["provider"],
             "model": ai["model"],
+            "translated_to": sorted(translations),
             "created_at": utc_now_iso(),
         })
     except Exception as e:

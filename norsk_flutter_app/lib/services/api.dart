@@ -180,10 +180,17 @@ class Api {
   /// Whether the user may have a recording transcribed by AI in [groupId] now, and what is left.
   Future<AiAllowance> aiAllowance(String groupId) async =>
     AiAllowance.fromJson(Map<String, dynamic>.from((await get('/api/groups/$groupId/ai-allowance')).data as Map));
+  /// How many recordings with their own texts the user may still share in [groupId] this month.
+  Future<ShareAllowance> shareAllowance(String groupId) async =>
+    ShareAllowance.fromJson(Map<String, dynamic>.from((await get('/api/groups/$groupId/share-allowance')).data as Map));
   /// Creates a recording in [groupId] from [media] (on the user's Google Drive, shared with anyone with
-  /// the link) spoken in [language]: with [texts] those are its sentences, else it is transcribed by AI.
-  Future<void> createRecording(String groupId, String name, String language, RecordingMedia media, RecordingTexts? texts) async {
-    await post('/api/groups/$groupId/recordings', data: {'name': name, 'language': language, ..._mediaFields(media, texts)});
+  /// the link) spoken in [language], and returns its id: with [texts] those are its sentences (shared at
+  /// once), else it is queued for AI transcription and translation into [translations].
+  Future<String> createRecording(String groupId, String name, String language, RecordingMedia media, RecordingTexts? texts,
+      {List<String> translations = const []}) async {
+    final r = await post('/api/groups/$groupId/recordings', data: {'name': name, 'language': language,
+      if (texts == null && translations.isNotEmpty) 'translations': translations, ..._mediaFields(media, texts)});
+    return '${(r.data as Map)['id']}';
   }
   /// Adds the audio in [language] to an existing recording, or replaces it (see [createRecording]).
   Future<void> setRecordingAudio(String recordingId, String language, RecordingMedia media, RecordingTexts? texts) async {
@@ -191,6 +198,7 @@ class Api {
   }
   Map<String, dynamic> _mediaFields(RecordingMedia media, RecordingTexts? texts) => {
     'drive_id': media.driveId, 'media_kind': media.kind, 'mime_type': media.mimeType, 'file_name': media.name,
+    if (media.size != null) 'size_bytes': media.size,
     'mode': texts == null ? 'ai' : 'manual', ...?texts?.toJson(),
   };
   String _audioUrl(Recording r, String language) => url('/api/${r.isChapter ? 'chapters' : 'recordings'}/${r.id}/audio/$language');
